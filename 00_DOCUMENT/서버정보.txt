@@ -1,0 +1,27 @@
+< 파이썬 >
+- 실행 : CMD 명령프롬프트에서 실행
+
+< PostgreSQL >
+- 슈퍼유저 postgres 계정 비밀번호: ass20250408
+- 포트번호 : 5432
+- 로케일 : 디폴트
+
+< Google Cloud CLI >
+- 설치위치 : C:\Users\wowjj\AppData\Local\Google\Cloud SDK
+- 실행 : CMD 명령프롬프트에서 실행
+- https://cloud.google.com/sdk/auth_success?hl=ko
+
+# 구글 로그인 인증
+C:\>gcloud auth application-default login
+- Credentials saved to file: [C:\Users\wowjj\AppData\Roaming\gcloud\application_default_credentials.json]
+
+# 구글 프로젝트 인증
+- 프로젝트 ID : ai-style-synthesis
+- 구글콘솔 : https://console.cloud.google.com/welcome?hl=ko&invt=AbuNVQ&project=ai-style-synthesis
+C:\>gcloud auth application-default set-quota-project ai-style-synthesis
+Credentials saved to file: [C:\Users\wowjj\AppData\Roaming\gcloud\application_default_credentials.json]
+
+< GitHub >
+wowjjang83@naver.com
+이효진830125
+- 레포지토리 : Ai-Style-Synthesis
