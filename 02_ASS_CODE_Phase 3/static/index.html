@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Style Synthesis</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <header>
+        <h1>AI Style Synthesis</h1>
+        <nav>
+            <span id="user-info"></span>
+        </nav>
+    </header>
+
+    <main class="synthesizer-layout">
+        <section id="model-area">
+            <h2>기본 모델</h2>
+            <img id="base-model-image" src="assets/images/placeholder_model.png" alt="Base Model">
+        </section>
+
+        <section id="item-area">
+            <h2>아이템 선택 및 업로드</h2>
+            <div>
+                <label for="item-type">아이템 종류:</label>
+                <select id="item-type">
+                    <option value="hair">Hair</option>
+                    <option value="top">Top</option>
+                    <option value="bottom">Bottom</option>
+                    <option value="shoes">Shoes</option>
+                    <option value="bag">Bag</option>
+                    <option value="accessory">Accessory</option>
+                </select>
+            </div>
+            <div>
+                <label for="item-upload">아이템 이미지:</label>
+                <input type="file" id="item-upload" accept="image/*">
+                <input type="text" id="item-url" placeholder="또는 이미지 URL 입력">
+            </div>
+            <div id="item-preview">
+                </div>
+            <button id="synthesize-button">합성하기</button>
+        </section>
+
+        <section id="result-area">
+            <h2>합성 결과</h2>
+            <div id="loading-indicator" style="display: none;">로딩 중...</div>
+            <img id="result-image" src="assets/images/placeholder_result.png" alt="Synthesis Result">
+            <button id="download-button" style="display: none;">다운로드</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2025 Your Company</p>
+    </footer>
+
+    <script src="js/api.js"></script> <script src="js/main.js"></script> </body>
+</html>

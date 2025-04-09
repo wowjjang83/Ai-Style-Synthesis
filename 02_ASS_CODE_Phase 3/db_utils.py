@@ -430,6 +430,41 @@ def update_setting(setting_key: str, setting_value: str) -> bool:
         if conn: conn.close()
     return success
 
+def find_user_by_id(user_id):
+    """ 사용자 ID로 사용자 정보를 조회합니다. (이메일 포함) """
+    conn = None
+    try:
+        conn = get_db_connection() # DB 연결 함수 호출 (기존 코드에 맞게)
+        # DictCursor를 사용하면 결과를 딕셔너리처럼 접근 가능 (row['email'])
+        # cursor_factory=DictCursor 사용 안하면 인덱스로 접근 (row[1])
+        cur = conn.cursor() # 필요시 cursor_factory=DictCursor 추가
+
+        # users 테이블에서 id 와 email (필요시 다른 필드도) 조회
+        # 실제 테이블/필드명 확인 필요
+        cur.execute("SELECT id, email FROM users WHERE id = %s", (user_id,))
+        user_data = cur.fetchone() # ID는 고유하므로 fetchone 사용
+
+        cur.close()
+        # print(f"DB find_user_by_id({user_id}): Found data - {user_data}") # 디버깅용
+
+        if user_data:
+             # DictCursor 사용 시: return dict(user_data) 또는 필요한 필드만 추출
+             # 기본 커서 사용 시: 인덱스 기반으로 딕셔너리 생성
+             # 예시 (기본 커서, id=0, email=1 가정):
+             return {"id": user_data[0], "email": user_data[1]}
+             # 예시 (DictCursor 사용 시):
+             # return {"id": user_data['id'], "email": user_data['email']}
+        else:
+             return None # 해당 ID의 사용자가 없음
+
+    except Exception as e:
+        print(f"Database error in find_user_by_id: {e}")
+        # 실제 운영 환경에서는 로깅 사용 권장 (logging.error(...))
+        return None # 오류 발생 시 None 반환
+    finally:
+        if conn:
+            conn.close() # 연결 반환 또는 닫기
+
 # TODO: Add other CRUD functions for base_models (add, update, delete, get_by_id, get_all...)
 # TODO: Add functions for users table (register, find_by_email...)
 # TODO: Add functions for usage_tracking table (check_limit, increment_count...)
