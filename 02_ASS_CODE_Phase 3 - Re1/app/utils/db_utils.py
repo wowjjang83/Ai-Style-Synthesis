@@ -562,5 +562,43 @@ def increment_usage(user_id: int) -> bool:
             # print("[DB Connection] 연결 종료 (increment_usage)")
     return success
 
+# --- 추가: 특정 날짜의 총 사용량 조회 함수 ---
+def get_total_usage_for_date(usage_date: date) -> int:
+    """
+    usage_tracking 테이블에서 특정 날짜(usage_date)의 모든 사용자 사용 횟수 총합을 조회합니다.
+
+    Args:
+        usage_date (date): 조회할 날짜
+
+    Returns:
+        int: 해당 날짜의 총 사용 횟수. 기록이 없거나 오류 시 0 반환.
+    """
+    conn = get_db_connection()
+    if not conn: return 0 # 연결 실패 시 0 반환
+
+    total_count = 0
+    try:
+        with conn.cursor() as cur:
+            # SUM() 집계 함수 사용, 결과가 NULL일 경우 COALESCE로 0 반환
+            cur.execute(
+                "SELECT COALESCE(SUM(count), 0) FROM usage_tracking WHERE usage_date = %s",
+                (usage_date,)
+            )
+            result = cur.fetchone()
+            if result:
+                total_count = result[0]
+                print(f"[DB Get Total Usage] 성공: Date={usage_date}, Total Count={total_count}")
+            # 결과가 없어도 COALESCE 덕분에 0이 반환됨
+    except psycopg2.Error as e:
+        print(f"[DB Get Total Usage] 오류 발생 (Date={usage_date}): {e}")
+        # 오류 발생 시에도 0 반환 (또는 예외 처리 방식 변경 가능)
+    finally:
+        if conn:
+            conn.close()
+            # print("[DB Connection] 연결 종료 (get_total_usage_for_date)")
+    return total_count
+
 # --- 추가적인 유틸리티 함수 (필요시) ---
 # 예: 특정 역할(role)을 가진 사용자 목록 조회 등
+
+

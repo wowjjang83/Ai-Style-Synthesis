@@ -86,6 +86,12 @@
                         로그아웃
                     </button>
                  </form>
+                    {# if session.get('role') #}
+                    <a href="/admin/dashboard" id="admin-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
+                        관리페이지
+                    </a>
+                    {# else #}
+                    {# endif #}
                 {% else %}
                  {# 비로그인 시 로그인/회원가입 버튼 (base.html과 동일 로직) #}
                  <a href="{{ url_for('auth.login') }}" id="login-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
