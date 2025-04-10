@@ -61,6 +61,10 @@
              bottom: 0;
              left: 0;
          }
+         /* Ensure error message area is visible when not hidden */
+         #upload-error-message-area:not(.hidden) {
+             display: block !important;
+         }
     </style>
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
@@ -117,7 +121,7 @@
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">기본 모델</h2>
                 <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
-                     {# 복구: DB에서 전달된 base_model_image_url 변수 사용 #}
+                     {# DB에서 전달된 base_model_image_url 변수 사용 #}
                     <img id="base-model-image" src="{{ base_model_image_url }}" alt="기본 모델"
                          onerror="this.onerror=null; this.src='https://placehold.co/512x512/cccccc/666666?text=Base+Model+Load+Error';">
                 </div>
@@ -154,9 +158,10 @@
                      <p class="text-xs text-gray-500 mt-1">팁: 배경이 없거나 단색인 이미지가 더 좋은 결과를 얻을 수 있습니다.</p>
                 </div>
 
-                 <div id="error-message-area" class="mb-4 px-4 py-3 rounded relative bg-red-100 border border-red-400 text-red-700 hidden" role="alert">
+                 {# 오류 메시지 표시 영역 #}
+                 <div id="upload-error-message-area" class="mb-4 px-4 py-3 rounded relative bg-red-100 border border-red-400 text-red-700 hidden" role="alert">
                      <strong class="font-bold">오류:</strong>
-                     <span id="error-message-content" class="block sm:inline"></span>
+                     <span id="upload-error-message-content" class="block sm:inline"></span>
                  </div>
 
                 <div class="mt-auto"> {# 버튼을 하단에 위치시키기 위해 mt-auto 추가 #}
@@ -186,7 +191,10 @@
                  <p id="result-placeholder" class="text-sm text-gray-500 mt-2 text-center">합성 결과가 여기에 표시됩니다.</p>
             </div>
 
-        </div> </div> <script>
+        </div>
+    </div>
+
+    <script>
         // --- DOM Element References ---
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('item-image-upload');
@@ -201,16 +209,17 @@
         const resultActions = document.getElementById('result-actions');
         const downloadLink = document.getElementById('download-link');
         const resultPlaceholder = document.getElementById('result-placeholder');
-        const loadingIndicator = document.getElementById('loading-indicator'); // Text indicator
-        const errorMessageArea = document.getElementById('error-message-area');
-        const errorMessageContent = document.getElementById('error-message-content');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessageArea = document.getElementById('upload-error-message-area');
+        const errorMessageContent = document.getElementById('upload-error-message-content');
         const remainingAttemptsSpan = document.getElementById('remaining-attempts-display');
         const itemTypeSelect = document.getElementById('item-type');
 
-        let uploadedFile = null; // Store the uploaded file object
+        let uploadedFile = null;
 
         // --- Constants ---
         const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
         // --- Event Listeners ---
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -218,7 +227,11 @@
         uploadArea.addEventListener('dragover', handleDragOver);
         uploadArea.addEventListener('dragleave', handleDragLeave);
         uploadArea.addEventListener('drop', handleDrop);
-        removeButton.addEventListener('click', removeImage);
+        // '이미지 제거' 버튼 클릭 시 이벤트 전파 중단 및 removeImage 함수 호출
+        removeButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // 클릭 이벤트가 uploadArea로 전파되는 것을 막음
+            removeImage();
+        });
         synthesizeButton.addEventListener('click', handleSynthesize);
 
         // --- Functions ---
@@ -244,166 +257,205 @@
             processSelectedFile(file);
         }
 
+        // 파일 선택 또는 드롭 시 처리 함수
         function processSelectedFile(file) {
-             hideError(); // Clear previous errors first
-             if (file && file.type.startsWith('image/')) {
-                 if (file.size > MAX_FILE_SIZE) {
-                     showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
-                     removeImage(); // Clear selection if too large
+             hideError(); // 이전 오류 메시지 숨기기
+             if (file) {
+                 console.log("[File Processing] File selected:", file.name, file.type, file.size);
+                 // 파일 타입 검사
+                 if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+                     console.log("[File Validation] Fail: Invalid file type -", file.type);
+                     showError(`허용되지 않는 파일 형식입니다. (PNG, JPG, JPEG)`);
+                     removeImage(); // 잘못된 파일이면 선택 초기화
                      return;
                  }
-                 displayPreview(file);
-                 uploadedFile = file;
-                 updateSynthesizeButtonState(); // Update button state based on file and attempts
-                 // Manually set the file input's files property (optional)
-                 const dataTransfer = new DataTransfer();
-                 dataTransfer.items.add(file);
-                 fileInput.files = dataTransfer.files;
-             } else if (file) { // File exists but is not an image
-                 showError("이미지 파일(PNG, JPG, JPEG)만 업로드 가능합니다.");
-                 removeImage(); // Clear selection if not an image
-             } else { // No file selected/dropped
-                 removeImage();
+                 // 파일 크기 검사
+                 if (file.size > MAX_FILE_SIZE) {
+                     console.log("[File Validation] Fail: File size exceeded -", file.size);
+                     showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
+                     removeImage(); // 잘못된 파일이면 선택 초기화
+                     return;
+                 }
+                 // 유효성 검사 통과
+                 console.log("[File Validation] Success");
+                 displayPreview(file); // 미리보기 표시
+                 uploadedFile = file; // 업로드된 파일 저장
+                 updateSynthesizeButtonState(); // 버튼 상태 업데이트
+             } else {
+                 removeImage(); // 파일이 없는 경우 초기화
              }
          }
 
+        // 이미지 미리보기 표시 함수
         function displayPreview(file) {
             const reader = new FileReader();
             reader.onload = function(e) {
                 previewImage.src = e.target.result;
-                previewContainer.classList.remove('hidden');
-                uploadPrompt.classList.add('hidden');
+                previewContainer.classList.remove('hidden'); // 미리보기 영역 보이기
+                uploadPrompt.classList.add('hidden'); // 업로드 안내 텍스트 숨기기
             }
-            reader.readAsDataURL(file);
+            reader.readAsDataURL(file); // 파일을 Data URL로 읽기
         }
 
+        // 이미지 제거 함수
         function removeImage() {
-            fileInput.value = ''; // Clear the file input is crucial
-            previewImage.src = '#';
-            previewContainer.classList.add('hidden');
-            uploadPrompt.classList.remove('hidden');
-            uploadedFile = null;
-            updateSynthesizeButtonState(); // Update button state
-            hideError();
+            fileInput.value = ''; // 파일 입력 값 초기화 (중요!)
+            previewImage.src = '#'; // 미리보기 이미지 초기화
+            previewContainer.classList.add('hidden'); // 미리보기 영역 숨기기
+            uploadPrompt.classList.remove('hidden'); // 업로드 안내 텍스트 보이기
+            uploadedFile = null; // 저장된 파일 정보 제거
+            updateSynthesizeButtonState(); // 버튼 상태 업데이트
+            hideError(); // 오류 메시지 숨기기
+            console.log("[Image Removed]");
         }
 
+        // '합성하기' 버튼 클릭 시 실행될 함수
         async function handleSynthesize() {
+             hideError(); // 이전 오류 숨기기
+
+            // 파일 업로드 여부 확인
             if (!uploadedFile) {
                 showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
                 return;
             }
+            // 버튼 비활성화 상태 확인 (횟수 초과 등)
             if (synthesizeButton.disabled) {
                  let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
                  if (isNaN(currentAttempts) || currentAttempts <= 0) {
                      showError("합성 횟수를 모두 사용했습니다.");
                  } else {
-                     showError("합성을 진행할 수 없습니다.");
+                     showError("합성을 진행할 수 없습니다."); // 다른 이유로 비활성화된 경우
                  }
                  return;
              }
 
-            const itemType = itemTypeSelect.value;
+            const itemType = itemTypeSelect.value; // 선택된 아이템 종류 가져오기
 
-            // --- Start Loading State ---
+            // 로딩 상태 시작
             setLoadingState(true);
-            hideError();
+            // 결과 영역 초기화
             resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
             resultActions.classList.add('hidden');
             resultPlaceholder.classList.remove('hidden');
             resultPlaceholder.textContent = '이미지 합성 중...';
 
-            // --- Prepare FormData ---
+            // FormData 객체 생성 및 데이터 추가
             const formData = new FormData();
             formData.append('item_image', uploadedFile);
             formData.append('item_type', itemType);
 
             console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
 
-            // --- API Call ---
+            // 백엔드 API 호출
             try {
                 const response = await fetch('/synthesize/web', {
                     method: 'POST',
                     body: formData,
+                    // FormData 사용 시 'Content-Type' 헤더는 브라우저가 자동으로 설정
                 });
 
-                const result = await response.json();
+                const result = await response.json(); // 응답 JSON 파싱
 
+                // 응답 상태 코드 확인
                 if (!response.ok) {
+                    // 백엔드에서 전달된 오류 메시지 사용
                     throw new Error(result.error || `HTTP error! status: ${response.status}`);
                 }
 
-                // --- Process Success ---
+                // 성공 응답 처리
                 console.log("API Result:", result);
                  if (result.output_file_url) {
-                     resultImage.src = result.output_file_url;
-                     downloadLink.href = result.output_file_url;
-                     resultActions.classList.remove('hidden');
-                     resultPlaceholder.classList.add('hidden');
+                     // 결과 이미지 표시 (캐시 방지용 타임스탬프 추가)
+                     resultImage.src = result.output_file_url + '?t=' + new Date().getTime();
+                     downloadLink.href = result.output_file_url; // 다운로드 링크 설정
+                     resultActions.classList.remove('hidden'); // 다운로드 버튼 표시
+                     resultPlaceholder.classList.add('hidden'); // Placeholder 숨김
 
+                     // 남은 횟수 업데이트
                      if (result.remaining_attempts !== undefined) {
                          remainingAttemptsSpan.textContent = result.remaining_attempts;
-                         updateSynthesizeButtonState();
+                         updateSynthesizeButtonState(); // 버튼 상태 업데이트
                      }
                  } else {
+                     // 성공했지만 URL이 없는 비정상적인 경우
                      throw new Error("합성 결과 URL을 받지 못했습니다.");
                  }
 
             } catch (error) {
-                // --- Process Error ---
+                // 오류 처리
                 console.error('Synthesis Error:', error);
                 showError(`합성 중 오류 발생: ${error.message}`);
+                // 결과 영역 실패 상태로 표시
                 resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
                 resultActions.classList.add('hidden');
                 resultPlaceholder.classList.remove('hidden');
                 resultPlaceholder.textContent = '합성에 실패했습니다.';
             } finally {
-                // --- End Loading State ---
+                // 로딩 상태 종료
                 setLoadingState(false);
             }
         }
 
         // --- UI Helper Functions ---
+        // 로딩 상태 설정 함수
         function setLoadingState(isLoading) {
              if (isLoading) {
-                 synthesizeButton.disabled = true;
-                 buttonText.textContent = '처리중';
-                 buttonSpinner.classList.remove('hidden');
-                 loadingIndicator.classList.remove('hidden');
+                 synthesizeButton.disabled = true; // 버튼 비활성화
+                 buttonText.textContent = '처리중'; // 버튼 텍스트 변경
+                 buttonSpinner.classList.remove('hidden'); // 스피너 보이기
+                 loadingIndicator.classList.remove('hidden'); // 로딩 텍스트 보이기
              } else {
-                 buttonText.textContent = '합성하기';
-                 buttonSpinner.classList.add('hidden');
-                 loadingIndicator.classList.add('hidden');
+                 buttonText.textContent = '합성하기'; // 버튼 텍스트 복원
+                 buttonSpinner.classList.add('hidden'); // 스피너 숨기기
+                 loadingIndicator.classList.add('hidden'); // 로딩 텍스트 숨기기
+                 // 로딩 종료 후 버튼 상태 다시 계산
                  updateSynthesizeButtonState();
              }
          }
 
+        // '합성하기' 버튼 상태 업데이트 함수
         function updateSynthesizeButtonState() {
             let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
-            const hasAttempts = !isNaN(currentAttempts) && currentAttempts > 0;
+            // 남은 횟수가 숫자가 아니거나 0보다 큰 경우 true
+            const hasAttempts = isNaN(currentAttempts) || currentAttempts > 0;
+            // 파일이 업로드되었고, 남은 횟수가 있을 때만 활성화
             const canSynthesize = uploadedFile && hasAttempts;
 
             synthesizeButton.disabled = !canSynthesize;
 
-            if (!hasAttempts) {
-                buttonText.textContent = '횟수 초과';
+            // 남은 횟수가 0 이하일 때 버튼 텍스트 변경
+            if (!hasAttempts && remainingAttemptsSpan.textContent !== 'N/A') {
+                 buttonText.textContent = '횟수 초과';
             } else {
                  buttonText.textContent = '합성하기';
             }
         }
 
+        // 오류 메시지 표시 함수
         function showError(message) {
-            errorMessageContent.textContent = message;
-            errorMessageArea.classList.remove('hidden');
+            if (errorMessageArea && errorMessageContent) {
+                 errorMessageContent.textContent = message;
+                 errorMessageArea.classList.remove('hidden'); // hidden 클래스 제거하여 보이기
+                 console.log("Error displayed:", message); // 콘솔에도 로그 남기기
+            } else {
+                 console.error("Error message area not found in DOM!");
+                 alert(`오류: ${message}`); // 최후의 수단으로 alert 사용
+            }
         }
 
+        // 오류 메시지 숨김 함수
         function hideError() {
-            errorMessageArea.classList.add('hidden');
-            errorMessageContent.textContent = '';
+            if (errorMessageArea) {
+                 errorMessageArea.classList.add('hidden'); // hidden 클래스 추가하여 숨기기
+                 errorMessageContent.textContent = ''; // 내용 비우기
+            }
         }
 
         // --- Initial Page Load ---
+        // 페이지 로드 완료 시 초기 버튼 상태 설정 및 오류 메시지 숨김
         document.addEventListener('DOMContentLoaded', () => {
              updateSynthesizeButtonState();
+             hideError();
         });
 
     </script>
