@@ -18,6 +18,9 @@ def create_app(config_name=None):
                 static_folder='static',
                 template_folder='templates')
 
+    # app/__init__.py 내부, app = Flask(...) 다음 줄에 추가
+    print(f" * Static Folder Absolute Path: {app.static_folder}")
+    
     # --- 1. 설정 로드 ---
     # (이전 코드와 동일)
     app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'default_dev_secret_key_please_change')

@@ -160,4 +160,4 @@ INSERT INTO base_models (name, image_url, is_active, prompt) VALUES
 -- 로컬 파일 경로를 사용하는 경우, Flask 애플리케이션이 해당 파일에 접근할 수 있어야 합니다.
 
 -- 항목 업데이트(수정)
-UPDATE base_models SET image_url = '/static/images/base_image.jpg' WHERE id = 2;
+UPDATE base_models SET image_url = '/static/images/base_model.jpg' WHERE id = 2;

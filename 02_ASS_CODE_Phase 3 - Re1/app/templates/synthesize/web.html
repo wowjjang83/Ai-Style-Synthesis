@@ -117,9 +117,9 @@
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">기본 모델</h2>
                 <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
-                     {# 활성 기본 모델 이미지 표시 (백엔드에서 전달된 URL 사용) #}
+                     {# 복구: DB에서 전달된 base_model_image_url 변수 사용 #}
                     <img id="base-model-image" src="{{ base_model_image_url }}" alt="기본 모델"
-                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/cccccc/666666?text=Base+Model+Load+Error';"> {# 이미지 로드 실패 시 대체 텍스트 #}
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/cccccc/666666?text=Base+Model+Load+Error';">
                 </div>
                 <p class="text-sm text-gray-500 mt-2 text-center">현재 적용되는 기본 모델입니다.</p>
             </div>
@@ -293,12 +293,11 @@
                 return;
             }
             if (synthesizeButton.disabled) {
-                 // Handle cases where button is disabled (e.g., no attempts left)
                  let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
                  if (isNaN(currentAttempts) || currentAttempts <= 0) {
                      showError("합성 횟수를 모두 사용했습니다.");
                  } else {
-                     showError("합성을 진행할 수 없습니다."); // Generic message
+                     showError("합성을 진행할 수 없습니다.");
                  }
                  return;
              }
@@ -308,8 +307,8 @@
             // --- Start Loading State ---
             setLoadingState(true);
             hideError();
-            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...'; // Placeholder
-            resultActions.classList.add('hidden'); // Hide download button
+            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
+            resultActions.classList.add('hidden');
             resultPlaceholder.classList.remove('hidden');
             resultPlaceholder.textContent = '이미지 합성 중...';
 
@@ -325,14 +324,11 @@
                 const response = await fetch('/synthesize/web', {
                     method: 'POST',
                     body: formData,
-                    // 'Content-Type' is automatically set by browser for FormData
-                    // headers: { 'X-CSRFToken': '...' } // Add if CSRF needed
                 });
 
-                const result = await response.json(); // Try to parse JSON regardless of status
+                const result = await response.json();
 
                 if (!response.ok) {
-                    // Throw an error with the message from backend if available
                     throw new Error(result.error || `HTTP error! status: ${response.status}`);
                 }
 
@@ -340,21 +336,16 @@
                 console.log("API Result:", result);
                  if (result.output_file_url) {
                      resultImage.src = result.output_file_url;
-                     downloadLink.href = result.output_file_url; // Set download link URL
-                     // Optionally set download filename based on result if provided
-                     // downloadLink.download = `synthesis_${user_id}_${itemType}.png`;
+                     downloadLink.href = result.output_file_url;
                      resultActions.classList.remove('hidden');
                      resultPlaceholder.classList.add('hidden');
 
-                     // Update remaining attempts display
                      if (result.remaining_attempts !== undefined) {
                          remainingAttemptsSpan.textContent = result.remaining_attempts;
-                         updateSynthesizeButtonState(); // Update button based on new count
+                         updateSynthesizeButtonState();
                      }
-                     // Optionally show a success message
-                     // showMessage('합성에 성공했습니다!', 'success'); // Can be noisy
                  } else {
-                     throw new Error("합성 결과 URL을 받지 못했습니다."); // Should not happen on success
+                     throw new Error("합성 결과 URL을 받지 못했습니다.");
                  }
 
             } catch (error) {
@@ -375,14 +366,14 @@
         function setLoadingState(isLoading) {
              if (isLoading) {
                  synthesizeButton.disabled = true;
-                 buttonText.textContent = '처리중'; // Shorter text
+                 buttonText.textContent = '처리중';
                  buttonSpinner.classList.remove('hidden');
-                 loadingIndicator.classList.remove('hidden'); // Show text indicator
+                 loadingIndicator.classList.remove('hidden');
              } else {
                  buttonText.textContent = '합성하기';
                  buttonSpinner.classList.add('hidden');
-                 loadingIndicator.classList.add('hidden'); // Hide text indicator
-                 updateSynthesizeButtonState(); // Re-evaluate button state after loading
+                 loadingIndicator.classList.add('hidden');
+                 updateSynthesizeButtonState();
              }
          }
 
@@ -412,7 +403,7 @@
 
         // --- Initial Page Load ---
         document.addEventListener('DOMContentLoaded', () => {
-             updateSynthesizeButtonState(); // Set initial button state
+             updateSynthesizeButtonState();
         });
 
     </script>
