@@ -6,7 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from flask import Flask, request, jsonify, session, send_from_directory, redirect, url_for, abort
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google import generativeai as genai # 사용자님의 Phase 2 방식 적용 (별칭 genai 사용)
 
 # --- 사용자 정의 모듈 Import ---
 # db_utils.py 와 ai_module.py 가 app.py 와 같은 디렉토리에 있다고 가정
