@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI Style Synthesis{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Base 스타일 또는 Tailwind 사용자 정의 확장 */
+    </style>
+    {% block head_extra %}{% endblock %} {# 각 페이지별 추가 head 요소 #}
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <header class="mb-8 flex justify-between items-center">
+            <a href="{{ url_for('synthesize.index') }}"> {# 메인 페이지 링크 #}
+               <h1 class="text-3xl font-bold text-gray-800 hover:text-indigo-600">AI Style Synthesis</h1>
+            </a>
+            <div class="text-right">
+                {% if session.get('user_id') %}
+                    <div class="text-sm text-gray-600 mb-1">
+                        <span id="user-email-display">{{ session.get('user_email', '사용자') }}</span>
+                        (<span id="remaining-attempts-display">
+                            {# synthesize.index 에서 전달된 값 사용 #}
+                            {{ remaining_attempts if remaining_attempts is defined else 'N/A' }}
+                        </span>회 남음)
+                    </div>
+                    <form action="{{ url_for('auth.logout') }}" method="POST" style="display: inline;">
+                         {# CSRF 토큰 추가 필요 시 form 사용 #}
+                         <button type="submit" id="logout-button" class="bg-red-500 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded">
+                             로그아웃
+                         </button>
+                    </form>
+                {% else %}
+                    {# 로그인/회원가입 페이지 링크 또는 버튼 #}
+                     <a href="{{ url_for('auth.login') }}" id="login-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
+                         로그인
+                     </a>
+                     <a href="{{ url_for('auth.register') }}" id="register-button" class="bg-green-500 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded">
+                         회원가입
+                     </a>
+                {% endif %}
+            </div>
+        </header>
+
+        <main>
+            {% block content %}
+            {% endblock %}
+        </main>
+
+        <footer class="mt-12 text-center text-gray-500 text-sm">
+            <p>&copy; {{ now().year }} AI Style Synthesis. All rights reserved.</p>
+             {# Jinja2에서 현재 연도 가져오기 위해 추가 설정 필요할 수 있음 #}
+             {# 또는 간단히 &copy; 2025 ... #}
+        </footer>
+
+    </div> <script>
+        // 전역적으로 사용될 JavaScript 코드 (예: 알림 처리 등)
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
