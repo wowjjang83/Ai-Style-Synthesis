@@ -63,7 +63,7 @@
          }
          /* Ensure error message area is visible when not hidden */
          #upload-error-message-area:not(.hidden) {
-             display: block !important;
+             display: block !important; /* Make sure it's visible */
          }
     </style>
 </head>
@@ -259,30 +259,30 @@
 
         // 파일 선택 또는 드롭 시 처리 함수
         function processSelectedFile(file) {
-             hideError(); // 이전 오류 메시지 숨기기
+             hideError(); // Start by hiding previous errors
              if (file) {
                  console.log("[File Processing] File selected:", file.name, file.type, file.size);
-                 // 파일 타입 검사
+                 // Check 1: File Type
                  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
                      console.log("[File Validation] Fail: Invalid file type -", file.type);
                      showError(`허용되지 않는 파일 형식입니다. (PNG, JPG, JPEG)`);
-                     removeImage(); // 잘못된 파일이면 선택 초기화
-                     return;
+                     removeImage(); // Clear selection
+                     return; // Stop processing
                  }
-                 // 파일 크기 검사
+                 // Check 2: File Size
                  if (file.size > MAX_FILE_SIZE) {
                      console.log("[File Validation] Fail: File size exceeded -", file.size);
                      showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
-                     removeImage(); // 잘못된 파일이면 선택 초기화
-                     return;
+                     removeImage(); // Clear selection
+                     return; // Stop processing
                  }
-                 // 유효성 검사 통과
+                 // Validation passed
                  console.log("[File Validation] Success");
-                 displayPreview(file); // 미리보기 표시
-                 uploadedFile = file; // 업로드된 파일 저장
-                 updateSynthesizeButtonState(); // 버튼 상태 업데이트
+                 displayPreview(file); // Show preview
+                 uploadedFile = file; // Store file object
+                 updateSynthesizeButtonState(); // Update button state
              } else {
-                 removeImage(); // 파일이 없는 경우 초기화
+                 removeImage(); // Handle case where no file is selected
              }
          }
 
@@ -291,168 +291,168 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 previewImage.src = e.target.result;
-                previewContainer.classList.remove('hidden'); // 미리보기 영역 보이기
-                uploadPrompt.classList.add('hidden'); // 업로드 안내 텍스트 숨기기
+                previewContainer.classList.remove('hidden'); // Show preview area
+                uploadPrompt.classList.add('hidden'); // Hide prompt text
             }
-            reader.readAsDataURL(file); // 파일을 Data URL로 읽기
+            reader.readAsDataURL(file); // Read file as Data URL
         }
 
         // 이미지 제거 함수
         function removeImage() {
-            fileInput.value = ''; // 파일 입력 값 초기화 (중요!)
-            previewImage.src = '#'; // 미리보기 이미지 초기화
-            previewContainer.classList.add('hidden'); // 미리보기 영역 숨기기
-            uploadPrompt.classList.remove('hidden'); // 업로드 안내 텍스트 보이기
-            uploadedFile = null; // 저장된 파일 정보 제거
-            updateSynthesizeButtonState(); // 버튼 상태 업데이트
-            hideError(); // 오류 메시지 숨기기
+            fileInput.value = ''; // Clear file input value (important!)
+            previewImage.src = '#'; // Reset preview image src
+            previewContainer.classList.add('hidden'); // Hide preview area
+            uploadPrompt.classList.remove('hidden'); // Show prompt text
+            uploadedFile = null; // Clear stored file object
+            updateSynthesizeButtonState(); // Update button state
+            hideError(); // Hide any errors
             console.log("[Image Removed]");
         }
 
         // '합성하기' 버튼 클릭 시 실행될 함수
         async function handleSynthesize() {
-             hideError(); // 이전 오류 숨기기
+             hideError(); // Hide previous errors
 
-            // 파일 업로드 여부 확인
+            // Check if file is uploaded
             if (!uploadedFile) {
                 showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
                 return;
             }
-            // 버튼 비활성화 상태 확인 (횟수 초과 등)
+            // Check if button is disabled (e.g., no attempts left)
             if (synthesizeButton.disabled) {
                  let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
                  if (isNaN(currentAttempts) || currentAttempts <= 0) {
                      showError("합성 횟수를 모두 사용했습니다.");
                  } else {
-                     showError("합성을 진행할 수 없습니다."); // 다른 이유로 비활성화된 경우
+                     showError("합성을 진행할 수 없습니다."); // Generic message if disabled for other reasons
                  }
                  return;
              }
 
-            const itemType = itemTypeSelect.value; // 선택된 아이템 종류 가져오기
+            const itemType = itemTypeSelect.value; // Get selected item type
 
-            // 로딩 상태 시작
+            // --- Start Loading State ---
             setLoadingState(true);
-            // 결과 영역 초기화
+            // Reset result area
             resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
-            resultActions.classList.add('hidden');
-            resultPlaceholder.classList.remove('hidden');
-            resultPlaceholder.textContent = '이미지 합성 중...';
+            resultActions.classList.add('hidden'); // Hide download button
+            resultPlaceholder.classList.remove('hidden'); // Show placeholder
+            resultPlaceholder.textContent = '이미지 합성 중...'; // Update placeholder text
 
-            // FormData 객체 생성 및 데이터 추가
+            // --- Prepare FormData ---
             const formData = new FormData();
             formData.append('item_image', uploadedFile);
             formData.append('item_type', itemType);
 
             console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
 
-            // 백엔드 API 호출
+            // --- API Call ---
             try {
                 const response = await fetch('/synthesize/web', {
                     method: 'POST',
                     body: formData,
-                    // FormData 사용 시 'Content-Type' 헤더는 브라우저가 자동으로 설정
+                    // 'Content-Type' header is set automatically by the browser for FormData
                 });
 
-                const result = await response.json(); // 응답 JSON 파싱
+                const result = await response.json(); // Parse JSON response
 
-                // 응답 상태 코드 확인
+                // Check response status
                 if (!response.ok) {
-                    // 백엔드에서 전달된 오류 메시지 사용
+                    // Use error message from backend response if available
                     throw new Error(result.error || `HTTP error! status: ${response.status}`);
                 }
 
-                // 성공 응답 처리
+                // --- Process Success ---
                 console.log("API Result:", result);
                  if (result.output_file_url) {
-                     // 결과 이미지 표시 (캐시 방지용 타임스탬프 추가)
+                     // Display result image (add timestamp to prevent caching if needed)
                      resultImage.src = result.output_file_url + '?t=' + new Date().getTime();
-                     downloadLink.href = result.output_file_url; // 다운로드 링크 설정
-                     resultActions.classList.remove('hidden'); // 다운로드 버튼 표시
-                     resultPlaceholder.classList.add('hidden'); // Placeholder 숨김
+                     downloadLink.href = result.output_file_url; // Set download link URL
+                     resultActions.classList.remove('hidden'); // Show download button
+                     resultPlaceholder.classList.add('hidden'); // Hide placeholder text
 
-                     // 남은 횟수 업데이트
+                     // Update remaining attempts display if provided in response
                      if (result.remaining_attempts !== undefined) {
                          remainingAttemptsSpan.textContent = result.remaining_attempts;
-                         updateSynthesizeButtonState(); // 버튼 상태 업데이트
+                         updateSynthesizeButtonState(); // Update button state based on new count
                      }
                  } else {
-                     // 성공했지만 URL이 없는 비정상적인 경우
+                     // This case should ideally not happen if response.ok is true
                      throw new Error("합성 결과 URL을 받지 못했습니다.");
                  }
 
             } catch (error) {
-                // 오류 처리
+                // --- Process Error ---
                 console.error('Synthesis Error:', error);
-                showError(`합성 중 오류 발생: ${error.message}`);
-                // 결과 영역 실패 상태로 표시
+                showError(`합성 중 오류 발생: ${error.message}`); // Show error message to user
+                // Update result area to show failure state
                 resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
                 resultActions.classList.add('hidden');
                 resultPlaceholder.classList.remove('hidden');
                 resultPlaceholder.textContent = '합성에 실패했습니다.';
             } finally {
-                // 로딩 상태 종료
+                // --- End Loading State ---
                 setLoadingState(false);
             }
         }
 
         // --- UI Helper Functions ---
-        // 로딩 상태 설정 함수
+        // Set loading state for the synthesize button and indicator
         function setLoadingState(isLoading) {
              if (isLoading) {
-                 synthesizeButton.disabled = true; // 버튼 비활성화
-                 buttonText.textContent = '처리중'; // 버튼 텍스트 변경
-                 buttonSpinner.classList.remove('hidden'); // 스피너 보이기
-                 loadingIndicator.classList.remove('hidden'); // 로딩 텍스트 보이기
+                 synthesizeButton.disabled = true; // Disable button
+                 buttonText.textContent = '처리중'; // Change button text
+                 buttonSpinner.classList.remove('hidden'); // Show spinner
+                 loadingIndicator.classList.remove('hidden'); // Show loading text
              } else {
-                 buttonText.textContent = '합성하기'; // 버튼 텍스트 복원
-                 buttonSpinner.classList.add('hidden'); // 스피너 숨기기
-                 loadingIndicator.classList.add('hidden'); // 로딩 텍스트 숨기기
-                 // 로딩 종료 후 버튼 상태 다시 계산
+                 buttonText.textContent = '합성하기'; // Restore button text
+                 buttonSpinner.classList.add('hidden'); // Hide spinner
+                 loadingIndicator.classList.add('hidden'); // Hide loading text
+                 // Re-evaluate and set button disabled state after loading
                  updateSynthesizeButtonState();
              }
          }
 
-        // '합성하기' 버튼 상태 업데이트 함수
+        // Update the 'Synthesize' button's disabled state and text based on file upload and remaining attempts
         function updateSynthesizeButtonState() {
             let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
-            // 남은 횟수가 숫자가 아니거나 0보다 큰 경우 true
+            // Consider attempts available if not a number (e.g., 'N/A') or greater than 0
             const hasAttempts = isNaN(currentAttempts) || currentAttempts > 0;
-            // 파일이 업로드되었고, 남은 횟수가 있을 때만 활성화
+            // Button enabled only if a file is uploaded AND attempts are available
             const canSynthesize = uploadedFile && hasAttempts;
 
             synthesizeButton.disabled = !canSynthesize;
 
-            // 남은 횟수가 0 이하일 때 버튼 텍스트 변경
-            if (!hasAttempts && remainingAttemptsSpan.textContent !== 'N/A') {
+            // Update button text if attempts are used up
+            if (!hasAttempts && remainingAttemptsSpan.textContent !== 'N/A') { // Check for N/A to avoid showing '횟수 초과' initially
                  buttonText.textContent = '횟수 초과';
             } else {
                  buttonText.textContent = '합성하기';
             }
         }
 
-        // 오류 메시지 표시 함수
+        // Display error messages in the designated area
         function showError(message) {
             if (errorMessageArea && errorMessageContent) {
                  errorMessageContent.textContent = message;
-                 errorMessageArea.classList.remove('hidden'); // hidden 클래스 제거하여 보이기
-                 console.log("Error displayed:", message); // 콘솔에도 로그 남기기
+                 errorMessageArea.classList.remove('hidden'); // Make sure the area is visible
+                 console.log("Error displayed:", message); // Log for debugging
             } else {
                  console.error("Error message area not found in DOM!");
-                 alert(`오류: ${message}`); // 최후의 수단으로 alert 사용
+                 alert(`오류: ${message}`); // Fallback to alert if area is missing
             }
         }
 
-        // 오류 메시지 숨김 함수
+        // Hide the error message area
         function hideError() {
             if (errorMessageArea) {
-                 errorMessageArea.classList.add('hidden'); // hidden 클래스 추가하여 숨기기
-                 errorMessageContent.textContent = ''; // 내용 비우기
+                 errorMessageArea.classList.add('hidden'); // Add hidden class
+                 errorMessageContent.textContent = ''; // Clear content
             }
         }
 
         // --- Initial Page Load ---
-        // 페이지 로드 완료 시 초기 버튼 상태 설정 및 오류 메시지 숨김
+        // Set initial button state and hide error area when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
              updateSynthesizeButtonState();
              hideError();
