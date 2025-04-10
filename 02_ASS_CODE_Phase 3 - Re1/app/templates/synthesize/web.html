@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Style Synthesis - 이미지 합성</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles if needed */
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .upload-area:hover {
+            background-color: #f9f9f9;
+        }
+        .upload-area.dragover {
+             background-color: #e0e0e0;
+             border-color: #aaa;
+        }
+        #loading-indicator {
+            display: none; /* Initially hidden */
+            /* Add spinner styles or use a library */
+        }
+        /* Simple spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <header class="mb-8 flex justify-between items-center">
+            <h1 class="text-3xl font-bold text-gray-800">AI Style Synthesis</h1>
+            <div class="text-right">
+                <div id="user-info" class="text-sm text-gray-600 mb-1">
+                    <span id="user-email-display">guest@example.com</span> (<span id="remaining-attempts">3</span>회 남음)
+                </div>
+                <button id="logout-button" class="bg-red-500 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded">
+                    로그아웃
+                </button>
+                </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">기본 모델</h2>
+                <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
+                     <img id="base-model-image" src="https://placehold.co/512x512/cccccc/666666?text=Base+Model" alt="기본 모델" class="object-cover w-full h-full">
+                </div>
+                <p class="text-sm text-gray-500 mt-2 text-center">현재 적용되는 기본 모델입니다.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">아이템 선택 및 업로드</h2>
+
+                <div class="mb-4">
+                    <label for="item-type" class="block text-sm font-medium text-gray-700 mb-1">아이템 종류:</label>
+                    <select id="item-type" name="item_type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+                        <option value="top">상의 (Top)</option>
+                        <option value="bottom">하의 (Bottom)</option>
+                        <option value="shoes">신발 (Shoes)</option>
+                        <option value="bag">가방 (Bag)</option>
+                        <option value="accessory">액세서리 (Accessory)</option>
+                        <option value="hair">헤어 (Hair)</option>
+                        </select>
+                </div>
+
+                <div class="mb-4">
+                    <label for="item-image-upload" class="block text-sm font-medium text-gray-700 mb-1">아이템 이미지:</label>
+                    <div id="upload-area" class="upload-area rounded-md">
+                        <input type="file" id="item-image-upload" accept="image/png, image/jpeg, image/jpg" class="hidden">
+                        <p id="upload-prompt" class="text-gray-500">여기에 이미지를 드래그하거나 클릭하여 업로드하세요.<br>(PNG, JPG, JPEG)</p>
+                        <div id="image-preview-container" class="mt-4 hidden">
+                            <img id="image-preview" src="#" alt="업로드 미리보기" class="max-h-40 mx-auto rounded">
+                            <button id="remove-image-button" class="mt-2 text-xs text-red-600 hover:text-red-800">이미지 제거</button>
+                        </div>
+                    </div>
+                     <p class="text-xs text-gray-500 mt-1">팁: 배경이 없거나 단색인 이미지가 더 좋은 결과를 얻을 수 있습니다.</p>
+                </div>
+
+                <button id="synthesize-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition duration-150 ease-in-out disabled:opacity-50" disabled>
+                    합성하기
+                </button>
+                 <div id="loading-indicator" class="mt-4 flex justify-center items-center">
+                    <div class="spinner"></div>
+                    <p class="ml-2 text-gray-600">이미지 합성 중...</p>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">합성 결과</h2>
+                <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
+                    <img id="result-image" src="https://placehold.co/512x512/e0e0e0/999999?text=Result" alt="합성 결과" class="object-cover w-full h-full">
+                </div>
+                 <div id="result-actions" class="mt-4 text-center hidden">
+                    <button id="download-button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                        결과 다운로드
+                    </button>
+                    </div>
+                 <p id="result-placeholder" class="text-sm text-gray-500 mt-2 text-center">합성 결과가 여기에 표시됩니다.</p>
+            </div>
+
+        </div> <div id="error-message-area" class="mt-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md hidden" role="alert">
+            <strong class="font-bold">오류:</strong>
+            <span id="error-message-content" class="block sm:inline"></span>
+        </div>
+
+    </div> <script>
+        // Basic frontend logic (will be moved to main.js)
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('item-image-upload');
+        const uploadPrompt = document.getElementById('upload-prompt');
+        const previewContainer = document.getElementById('image-preview-container');
+        const previewImage = document.getElementById('image-preview');
+        const removeButton = document.getElementById('remove-image-button');
+        const synthesizeButton = document.getElementById('synthesize-button');
+        const resultImage = document.getElementById('result-image');
+        const resultActions = document.getElementById('result-actions');
+        const resultPlaceholder = document.getElementById('result-placeholder');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessageArea = document.getElementById('error-message-area');
+        const errorMessageContent = document.getElementById('error-message-content');
+
+        let uploadedFile = null; // Store the uploaded file object
+
+        // --- Event Listeners ---
+
+        // Trigger file input click when upload area is clicked
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        // Handle file selection
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Handle drag & drop
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+
+        // Remove uploaded image
+        removeButton.addEventListener('click', removeImage);
+
+        // Synthesize button click (Placeholder for API call)
+        synthesizeButton.addEventListener('click', handleSynthesize);
+
+        // --- Functions ---
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file && file.type.startsWith('image/')) {
+                displayPreview(file);
+                uploadedFile = file; // Store the file
+                synthesizeButton.disabled = false; // Enable synthesize button
+                hideError(); // Hide any previous errors
+            } else {
+                showError("이미지 파일(PNG, JPG, JPEG)만 업로드 가능합니다.");
+                removeImage(); // Clear if invalid file type
+            }
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault(); // Prevent default browser behavior
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(event) {
+            event.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(event) {
+            event.preventDefault(); // Prevent default browser behavior
+            uploadArea.classList.remove('dragover');
+            const file = event.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                displayPreview(file);
+                uploadedFile = file; // Store the file
+                synthesizeButton.disabled = false; // Enable synthesize button
+                hideError(); // Hide any previous errors
+                 // Manually set the file input's files property for consistency (optional)
+                 const dataTransfer = new DataTransfer();
+                 dataTransfer.items.add(file);
+                 fileInput.files = dataTransfer.files;
+
+            } else {
+                 showError("이미지 파일(PNG, JPG, JPEG)만 드롭 가능합니다.");
+                 removeImage();
+            }
+        }
+
+        function displayPreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewContainer.classList.remove('hidden');
+                uploadPrompt.classList.add('hidden'); // Hide the prompt text
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function removeImage() {
+            fileInput.value = ''; // Clear the file input
+            previewImage.src = '#';
+            previewContainer.classList.add('hidden');
+            uploadPrompt.classList.remove('hidden'); // Show the prompt text
+            synthesizeButton.disabled = true; // Disable synthesize button
+            uploadedFile = null; // Clear stored file
+            hideError(); // Hide any errors related to previous upload
+        }
+
+        async function handleSynthesize() {
+            if (!uploadedFile) {
+                showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
+                return;
+            }
+
+            const itemTypeSelect = document.getElementById('item-type');
+            const itemType = itemTypeSelect.value;
+
+            // Show loading indicator
+            loadingIndicator.style.display = 'flex';
+            synthesizeButton.disabled = true; // Disable button during processing
+            hideError(); // Hide previous errors
+            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...'; // Placeholder during processing
+            resultActions.classList.add('hidden');
+            resultPlaceholder.classList.remove('hidden');
+
+
+            // --- Prepare data for API call ---
+            const formData = new FormData();
+            formData.append('item_image', uploadedFile);
+            formData.append('item_type', itemType);
+
+            console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
+
+            // --- API Call (Simulated with setTimeout) ---
+            try {
+                // Replace with actual fetch call to '/synthesize/web'
+                // const response = await fetch('/synthesize/web', {
+                //     method: 'POST',
+                //     body: formData,
+                //     // Add headers if needed (e.g., for CSRF token if using Flask-WTF)
+                // });
+
+                // // Check response status
+                // if (!response.ok) {
+                //     const errorData = await response.json().catch(() => ({ error: '서버 응답 처리 중 오류 발생' }));
+                //     throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                // }
+
+                // const result = await response.json();
+
+                // --- Simulated successful response ---
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
+                const simulatedResult = {
+                    message: "Synthesis successful!",
+                    // In a real scenario, the backend would return a URL to the saved image
+                    // For now, we'll just use the uploaded image preview as a placeholder result
+                    output_file_url: previewImage.src // Placeholder! Replace with actual result URL
+                };
+                 console.log("Simulated API Result:", simulatedResult);
+
+                // --- Process successful result ---
+                 // Update result image (replace placeholder URL with actual result)
+                 resultImage.src = simulatedResult.output_file_url || 'https://placehold.co/512x512/ff0000/ffffff?text=Error+Loading+Result'; // Fallback placeholder
+                 resultActions.classList.remove('hidden'); // Show download button
+                 resultPlaceholder.classList.add('hidden'); // Hide placeholder text
+
+                 // Update remaining attempts (requires another API call to /me or similar)
+                 // For now, just decrement visually (not accurate)
+                 const attemptsSpan = document.getElementById('remaining-attempts');
+                 let currentAttempts = parseInt(attemptsSpan.textContent);
+                 if (!isNaN(currentAttempts) && currentAttempts > 0) {
+                    attemptsSpan.textContent = currentAttempts - 1;
+                 }
+
+
+            } catch (error) {
+                console.error('Synthesis Error:', error);
+                showError(`합성 중 오류 발생: ${error.message}`);
+                // Reset result area on error
+                resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
+                resultActions.classList.add('hidden');
+                resultPlaceholder.classList.remove('hidden');
+                resultPlaceholder.textContent = '합성에 실패했습니다.';
+
+            } finally {
+                // Hide loading indicator and re-enable button
+                loadingIndicator.style.display = 'none';
+                 // Re-enable button only if there's a file selected
+                 synthesizeButton.disabled = !uploadedFile;
+            }
+        }
+
+        function showError(message) {
+            errorMessageContent.textContent = message;
+            errorMessageArea.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorMessageArea.classList.add('hidden');
+            errorMessageContent.textContent = '';
+        }
+
+        // Initial state check
+        if (!uploadedFile) {
+            synthesizeButton.disabled = true;
+        }
+
+    </script>
+
+</body>
+</html>
