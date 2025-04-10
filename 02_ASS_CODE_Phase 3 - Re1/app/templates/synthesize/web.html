@@ -63,7 +63,7 @@
          }
          /* Ensure error message area is visible when not hidden */
          #upload-error-message-area:not(.hidden) {
-             display: block !important; /* Make sure it's visible */
+             display: block !important;
          }
     </style>
 </head>
@@ -227,9 +227,9 @@
         uploadArea.addEventListener('dragover', handleDragOver);
         uploadArea.addEventListener('dragleave', handleDragLeave);
         uploadArea.addEventListener('drop', handleDrop);
-        // '이미지 제거' 버튼 클릭 시 이벤트 전파 중단 및 removeImage 함수 호출
         removeButton.addEventListener('click', (event) => {
-            event.stopPropagation(); // 클릭 이벤트가 uploadArea로 전파되는 것을 막음
+            event.preventDefault();
+            event.stopPropagation();
             removeImage();
         });
         synthesizeButton.addEventListener('click', handleSynthesize);
@@ -266,14 +266,14 @@
                  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
                      console.log("[File Validation] Fail: Invalid file type -", file.type);
                      showError(`허용되지 않는 파일 형식입니다. (PNG, JPG, JPEG)`);
-                     removeImage(); // Clear selection
+                     removeImage(true); // 수정: 오류 발생 시에는 오류 메시지 숨기지 않도록 인자 전달 (선택적)
                      return; // Stop processing
                  }
                  // Check 2: File Size
                  if (file.size > MAX_FILE_SIZE) {
                      console.log("[File Validation] Fail: File size exceeded -", file.size);
                      showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
-                     removeImage(); // Clear selection
+                     removeImage(true); // 수정: 오류 발생 시에는 오류 메시지 숨기지 않도록 인자 전달 (선택적)
                      return; // Stop processing
                  }
                  // Validation passed
@@ -298,14 +298,18 @@
         }
 
         // 이미지 제거 함수
-        function removeImage() {
+        // 수정: keepError 인자 추가 (기본값 false)
+        function removeImage(keepError = false) {
             fileInput.value = ''; // Clear file input value (important!)
             previewImage.src = '#'; // Reset preview image src
             previewContainer.classList.add('hidden'); // Hide preview area
             uploadPrompt.classList.remove('hidden'); // Show prompt text
             uploadedFile = null; // Clear stored file object
             updateSynthesizeButtonState(); // Update button state
-            hideError(); // Hide any errors
+            // 수정: keepError가 true가 아닐 때만 오류 메시지 숨김
+            if (!keepError) {
+                hideError();
+            }
             console.log("[Image Removed]");
         }
 
@@ -351,7 +355,6 @@
                 const response = await fetch('/synthesize/web', {
                     method: 'POST',
                     body: formData,
-                    // 'Content-Type' header is set automatically by the browser for FormData
                 });
 
                 const result = await response.json(); // Parse JSON response
@@ -384,6 +387,7 @@
             } catch (error) {
                 // --- Process Error ---
                 console.error('Synthesis Error:', error);
+                // 수정: 합성 오류는 다른 영역에 표시하거나, 여기서도 표시 가능
                 showError(`합성 중 오류 발생: ${error.message}`); // Show error message to user
                 // Update result area to show failure state
                 resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
@@ -435,19 +439,20 @@
         function showError(message) {
             if (errorMessageArea && errorMessageContent) {
                  errorMessageContent.textContent = message;
-                 errorMessageArea.classList.remove('hidden'); // Make sure the area is visible
-                 console.log("Error displayed:", message); // Log for debugging
+                 errorMessageArea.classList.remove('hidden'); // hidden 클래스 제거
+                 console.log("Error 123 displayed:", message, "Classes:", errorMessageArea.className);
             } else {
                  console.error("Error message area not found in DOM!");
-                 alert(`오류: ${message}`); // Fallback to alert if area is missing
+                 alert(`오류: ${message}`); // Fallback to alert
             }
         }
 
         // Hide the error message area
         function hideError() {
             if (errorMessageArea) {
-                 errorMessageArea.classList.add('hidden'); // Add hidden class
-                 errorMessageContent.textContent = ''; // Clear content
+                 errorMessageArea.classList.add('hidden'); // hidden 클래스 추가
+                 errorMessageContent.textContent = '';
+                 console.log("Error hidden. Classes:", errorMessageArea.className);
             }
         }
 
@@ -455,7 +460,7 @@
         // Set initial button state and hide error area when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
              updateSynthesizeButtonState();
-             hideError();
+             hideError(); // 페이지 로드 시에는 항상 숨김
         });
 
     </script>
