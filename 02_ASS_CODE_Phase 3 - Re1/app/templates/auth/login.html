@@ -7,24 +7,15 @@
     <div class="w-full max-w-md px-8 py-10 bg-white rounded-lg shadow-md">
         <h2 class="text-2xl font-bold text-center text-gray-800 mb-8">로그인</h2>
 
-        {# 플래시 메시지 표시 영역 (예: 로그인 실패 메시지) #}
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="mb-4 px-4 py-3 rounded relative
-                        {% if category == 'error' %} bg-red-100 border border-red-400 text-red-700
-                        {% elif category == 'success' %} bg-green-100 border border-green-400 text-green-700
-                        {% else %} bg-blue-100 border border-blue-400 text-blue-700 {% endif %}"
-                         role="alert">
-                        <span class="block sm:inline">{{ message }}</span>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        {# 오류 메시지 표시 영역 (JavaScript로 제어) #}
+        <div id="error-message-area" class="mb-4 px-4 py-3 rounded relative bg-red-100 border border-red-400 text-red-700 hidden" role="alert">
+            <strong class="font-bold">오류:</strong>
+            <span id="error-message-content" class="block sm:inline"></span>
+        </div>
 
         {# 로그인 폼 #}
-        <form method="POST" action="{{ url_for('auth.login') }}">
-             {# CSRF 보호 기능 사용 시 토큰 필드 추가: {{ form.hidden_tag() }} #}
+        <form method="POST" action="{{ url_for('auth.login') }}" id="login-form">
+             {# CSRF 보호 기능 사용 시 토큰 필드 추가 #}
             <div class="mb-4">
                 <label for="email" class="block text-sm font-medium text-gray-700 mb-1">이메일 주소</label>
                 <input type="email" id="email" name="email" required
@@ -36,13 +27,12 @@
                 <input type="password" id="password" name="password" required
                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                        placeholder="********">
-                {# TODO: 비밀번호 찾기 링크 추가? #}
             </div>
             <div class="flex items-center justify-between mb-6">
-                {# TODO: '로그인 상태 유지' 체크박스? #}
-                <button type="submit"
-                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
-                    로그인
+                <button type="submit" id="submit-button"
+                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-wait">
+                    <span class="button-text">로그인</span>
+                    <span class="loading-spinner hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" style="display: inline-block; vertical-align: middle;"></span>
                 </button>
             </div>
             <p class="text-center text-sm text-gray-600">
@@ -57,8 +47,79 @@
 {% endblock %} {# 메인 컨텐츠 영역 끝 #}
 
 {% block scripts %}
-{# 로그인 페이지 관련 JavaScript (필요시) #}
+{# 로그인 페이지 관련 JavaScript #}
 <script>
-    // 예: 입력 필드 유효성 검사 등
+    const loginForm = document.getElementById('login-form');
+    const submitButton = document.getElementById('submit-button');
+    const buttonText = submitButton.querySelector('.button-text');
+    const loadingSpinner = submitButton.querySelector('.loading-spinner');
+    const errorMessageArea = document.getElementById('error-message-area');
+    const errorMessageContent = document.getElementById('error-message-content');
+
+    loginForm.addEventListener('submit', async function(event) {
+        event.preventDefault(); // 기본 폼 제출 방지
+
+        // 오류 메시지 숨기기 및 버튼 로딩 상태 시작
+        hideError();
+        setLoading(true);
+
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+
+        try {
+            const response = await fetch("{{ url_for('auth.login') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 'X-CSRFToken': '...' // CSRF 토큰 필요 시 추가
+                },
+                body: JSON.stringify({ email: email, password: password })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) { // HTTP 상태 코드가 200-299 인 경우
+                console.log('Login successful:', result);
+                // 로그인 성공 시 메인 페이지로 리디렉션
+                window.location.href = "{{ url_for('synthesize.index') }}";
+                // 백엔드에서 flash 메시지를 사용한다면 별도 처리 불필요
+                // alert(result.message || '로그인 성공!');
+            } else {
+                // 로그인 실패 시 (401 Unauthorized 등)
+                console.error('Login failed:', result);
+                showError(result.error || '로그인 처리 중 오류가 발생했습니다.');
+            }
+
+        } catch (error) {
+            console.error('Network or other error:', error);
+            showError('로그인 요청 중 오류가 발생했습니다. 네트워크 상태를 확인해주세요.');
+        } finally {
+            // 로딩 상태 종료
+            setLoading(false);
+        }
+    });
+
+    function setLoading(isLoading) {
+        if (isLoading) {
+            submitButton.disabled = true;
+            buttonText.textContent = '로그인 중...';
+            loadingSpinner.classList.remove('hidden');
+        } else {
+            submitButton.disabled = false;
+            buttonText.textContent = '로그인';
+            loadingSpinner.classList.add('hidden');
+        }
+    }
+
+    function showError(message) {
+        errorMessageContent.textContent = message;
+        errorMessageArea.classList.remove('hidden');
+    }
+
+    function hideError() {
+        errorMessageArea.classList.add('hidden');
+        errorMessageContent.textContent = '';
+    }
+
 </script>
 {% endblock %}

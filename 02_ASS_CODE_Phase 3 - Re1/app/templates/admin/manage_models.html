@@ -1,0 +1,339 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}베이스 모델 관리 - {{ super() }}{% endblock %}
+
+{% block admin_content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">베이스 모델 관리</h1>
+
+{# 메시지 표시 영역 (예: 추가/수정/삭제 성공/실패) #}
+<div id="model-message-area" class="mb-4"></div>
+
+{# 새 모델 추가 버튼 #}
+<div class="mb-4 text-right">
+    <button id="add-model-button" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        + 새 모델 추가
+    </button>
+</div>
+
+{# 베이스 모델 목록 테이블 #}
+<div class="overflow-x-auto bg-white rounded-lg shadow">
+    <table class="min-w-full leading-normal">
+        <thead>
+            <tr>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    ID
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    이름
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    이미지
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    프롬프트 (일부)
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    활성 상태
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    생성일
+                </th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    관리
+                </th>
+            </tr>
+        </thead>
+        <tbody id="model-list-body">
+            {# 백엔드에서 전달된 models 리스트를 반복하여 행 생성 #}
+            {% for model in models %}
+            <tr id="model-row-{{ model.id }}">
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {{ model.id }}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {{ model.name | default('N/A') }}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {# TODO: 이미지 URL 유효성 및 표시 방법 개선 #}
+                    <img src="{{ model.image_url }}" alt="{{ model.name }}" class="w-16 h-16 object-cover rounded"
+                         onerror="this.onerror=null; this.src='https://placehold.co/64x64/cccccc/666666?text=Error';">
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {# 프롬프트가 너무 길 경우 일부만 표시 #}
+                    {{ (model.prompt | default(''))[:50] }}{% if (model.prompt | default(''))|length > 50 %}...{% endif %}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm text-center">
+                    {% if model.is_active %}
+                        <span class="inline-block px-3 py-1 text-xs font-semibold text-green-900 bg-green-200 rounded-full">활성</span>
+                    {% else %}
+                        <span class="inline-block px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 rounded-full">비활성</span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {# 날짜 형식 변환 필요 시 Jinja 필터 사용 #}
+                    {{ model.created_at.strftime('%Y-%m-%d %H:%M') if model.created_at else 'N/A' }}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm text-center whitespace-nowrap">
+                    {# 관리 버튼들 #}
+                    <button class="edit-model-button text-indigo-600 hover:text-indigo-900 mr-2" data-model-id="{{ model.id }}">수정</button>
+                    <button class="delete-model-button text-red-600 hover:text-red-900 mr-2" data-model-id="{{ model.id }}">삭제</button>
+                    {# 활성 상태가 아니면 활성화 버튼 표시 #}
+                    {% if not model.is_active %}
+                    <button class="activate-model-button text-green-600 hover:text-green-900" data-model-id="{{ model.id }}">활성화</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="px-5 py-5 border-b border-gray-200 bg-white text-center text-sm text-gray-500">
+                    등록된 베이스 모델이 없습니다.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# 모델 추가/수정 모달 (초기에는 숨김) #}
+<div id="model-modal" class="fixed z-10 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <form id="model-form">
+        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+              <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">베이스 모델 정보</h3>
+              <input type="hidden" id="model-id" name="model_id"> {# 수정 시 사용될 ID #}
+              <div class="mt-4 space-y-4">
+                <div>
+                  <label for="model-name" class="block text-sm font-medium text-gray-700">모델 이름 <span class="text-red-500">*</span></label>
+                  <input type="text" name="name" id="model-name" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
+                </div>
+                <div>
+                  <label for="model-image-url" class="block text-sm font-medium text-gray-700">이미지 URL <span class="text-red-500">*</span></label>
+                  <input type="url" name="image_url" id="model-image-url" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="http://... 또는 /path/to/image.jpg">
+                   <p class="mt-1 text-xs text-gray-500">웹 URL 또는 서버 내 파일 경로</p>
+                </div>
+                <div>
+                  <label for="model-prompt" class="block text-sm font-medium text-gray-700">프롬프트 (선택)</label>
+                  <textarea id="model-prompt" name="prompt" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
+                </div>
+                 {# 활성화 상태는 별도 버튼으로 처리하므로 폼에서는 제외하거나 읽기 전용으로 표시 #}
+                 </div>
+            </div>
+          </div>
+        </div>
+        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button type="submit" id="save-model-button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm">
+            저장
+          </button>
+          <button type="button" id="cancel-modal-button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+            취소
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {# admin_content 끝 #}
+
+{% block admin_scripts %}
+<script>
+    // --- DOM Elements ---
+    const addModelButton = document.getElementById('add-model-button');
+    const modelModal = document.getElementById('model-modal');
+    const modelForm = document.getElementById('model-form');
+    const cancelModalButton = document.getElementById('cancel-modal-button');
+    const saveModelButton = document.getElementById('save-model-button');
+    const modelListBody = document.getElementById('model-list-body');
+    const modelMessageArea = document.getElementById('model-message-area');
+    const modalTitle = document.getElementById('modal-title');
+    const modelIdInput = document.getElementById('model-id');
+    const modelNameInput = document.getElementById('model-name');
+    const modelImageUrlInput = document.getElementById('model-image-url');
+    const modelPromptInput = document.getElementById('model-prompt');
+
+    // --- Functions ---
+    function openModal(mode = 'add', modelData = null) {
+        modelForm.reset(); // 폼 초기화
+        modelIdInput.value = '';
+        hideMessage(); // 이전 메시지 숨기기
+
+        if (mode === 'edit' && modelData) {
+            modalTitle.textContent = '베이스 모델 수정';
+            modelIdInput.value = modelData.id;
+            modelNameInput.value = modelData.name || '';
+            modelImageUrlInput.value = modelData.image_url || '';
+            modelPromptInput.value = modelData.prompt || '';
+            // is_active는 별도 버튼으로 처리
+        } else {
+            modalTitle.textContent = '새 베이스 모델 추가';
+        }
+        modelModal.classList.remove('hidden');
+    }
+
+    function closeModal() {
+        modelModal.classList.add('hidden');
+    }
+
+    function showMessage(message, type = 'error') {
+        const alertClass = type === 'success'
+            ? 'bg-green-100 border-green-400 text-green-700'
+            : 'bg-red-100 border-red-400 text-red-700';
+        modelMessageArea.innerHTML = `
+            <div class="px-4 py-3 rounded relative border ${alertClass}" role="alert">
+                <span class="block sm:inline">${message}</span>
+            </div>`;
+        // 메시지 일정 시간 후 자동 숨김 (선택적)
+        // setTimeout(hideMessage, 5000);
+    }
+
+    function hideMessage() {
+         modelMessageArea.innerHTML = '';
+    }
+
+    async function handleFormSubmit(event) {
+        event.preventDefault();
+        hideMessage();
+        const modelId = modelIdInput.value;
+        const isEditMode = !!modelId;
+        const url = isEditMode ? `/admin/models/${modelId}` : '/admin/models';
+        const method = isEditMode ? 'PUT' : 'POST';
+
+        const formData = {
+            name: modelNameInput.value,
+            image_url: modelImageUrlInput.value,
+            prompt: modelPromptInput.value
+            // is_active는 별도 처리
+        };
+
+        // 입력값 검증
+        if (!formData.name || !formData.image_url) {
+             showMessage('모델 이름과 이미지 URL은 필수입니다.', 'error');
+             return;
+        }
+        // TODO: URL 형식 검증 추가
+
+        saveModelButton.disabled = true;
+        saveModelButton.textContent = '저장 중...';
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 'X-CSRFToken': '...' // 필요시 CSRF 토큰 추가
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || `서버 오류 (${response.status})`);
+            }
+
+            showMessage(isEditMode ? '모델 정보가 수정되었습니다.' : '새 모델이 추가되었습니다.', 'success');
+            closeModal();
+            // TODO: 목록 새로고침 또는 동적 업데이트
+            location.reload(); // 간단하게 페이지 새로고침
+
+        } catch (error) {
+            console.error('Save model error:', error);
+            showMessage(`모델 저장 실패: ${error.message}`, 'error');
+        } finally {
+             saveModelButton.disabled = false;
+             saveModelButton.textContent = '저장';
+        }
+    }
+
+    async function handleDeleteModel(modelId) {
+        if (!confirm(`정말로 ID ${modelId} 모델을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+            return;
+        }
+        hideMessage();
+
+        try {
+            const response = await fetch(`/admin/models/${modelId}`, {
+                method: 'DELETE',
+                // headers: { 'X-CSRFToken': '...' }
+            });
+
+            if (response.status === 204) { // No Content 성공
+                 showMessage(`모델 (ID: ${modelId})이(가) 삭제되었습니다.`, 'success');
+                 // 목록에서 해당 행 제거
+                 const row = document.getElementById(`model-row-${modelId}`);
+                 if (row) row.remove();
+            } else {
+                 const result = await response.json().catch(() => ({})); // 오류 시 빈 객체
+                 throw new Error(result.error || `삭제 실패 (${response.status})`);
+            }
+        } catch (error) {
+             console.error('Delete model error:', error);
+             showMessage(`모델 삭제 실패: ${error.message}`, 'error');
+        }
+    }
+
+     async function handleActivateModel(modelId) {
+         if (!confirm(`ID ${modelId} 모델을 활성화하시겠습니까? 다른 활성 모델은 비활성화됩니다.`)) {
+             return;
+         }
+         hideMessage();
+
+         try {
+             const response = await fetch(`/admin/models/${modelId}/activate`, {
+                 method: 'POST',
+                 // headers: { 'X-CSRFToken': '...' }
+             });
+
+             const result = await response.json();
+
+             if (!response.ok) {
+                 throw new Error(result.error || `활성화 실패 (${response.status})`);
+             }
+
+             showMessage(`모델 (ID: ${modelId})이(가) 활성화되었습니다.`, 'success');
+             // TODO: 목록 새로고침 또는 동적 업데이트
+             location.reload(); // 간단하게 페이지 새로고침
+
+         } catch (error) {
+              console.error('Activate model error:', error);
+              showMessage(`모델 활성화 실패: ${error.message}`, 'error');
+         }
+     }
+
+    // --- Event Listener Bindings ---
+    addModelButton.addEventListener('click', () => openModal('add'));
+    cancelModalButton.addEventListener('click', closeModal);
+    modelForm.addEventListener('submit', handleFormSubmit);
+
+    // 이벤트 위임 사용 (테이블 행이 동적으로 변경될 수 있으므로)
+    modelListBody.addEventListener('click', (event) => {
+        if (event.target.classList.contains('edit-model-button')) {
+            const modelId = event.target.dataset.modelId;
+            // TODO: 해당 ID의 모델 데이터를 API로 가져오거나,
+            //       페이지 로드 시 모든 데이터를 JS 변수에 저장해두었다가 사용
+            // 임시: 현재 행의 데이터를 기반으로 모달 열기 (데이터 불완전할 수 있음)
+            const row = event.target.closest('tr');
+            const modelData = {
+                id: modelId,
+                name: row.cells[1].textContent.trim(),
+                image_url: row.cells[2].querySelector('img')?.src || '',
+                prompt: row.cells[3].textContent.replace('...', '').trim() // 프롬프트 전체 필요 시 API 조회
+            };
+            openModal('edit', modelData);
+        } else if (event.target.classList.contains('delete-model-button')) {
+            const modelId = event.target.dataset.modelId;
+            handleDeleteModel(modelId);
+        } else if (event.target.classList.contains('activate-model-button')) {
+            const modelId = event.target.dataset.modelId;
+            handleActivateModel(modelId);
+        }
+    });
+
+</script>
+{% endblock %}

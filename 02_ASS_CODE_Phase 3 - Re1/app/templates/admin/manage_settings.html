@@ -1,0 +1,145 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}시스템 설정 관리 - {{ super() }}{% endblock %}
+
+{% block admin_content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">시스템 설정 관리</h1>
+
+{# 메시지 표시 영역 (예: 저장 성공/실패) #}
+<div id="settings-message-area" class="mb-4"></div>
+
+<form id="settings-form" class="space-y-6 bg-white p-6 rounded-lg shadow">
+
+    {# 사용자별 일일 합성 횟수 제한 #}
+    <div>
+        <label for="max_user_syntheses" class="block text-sm font-medium text-gray-700">사용자별 일일 최대 합성 횟수</label>
+        <input type="number" name="max_user_syntheses" id="max_user_syntheses" min="0" required
+               value="{{ settings.max_user_syntheses | default(3) }}"
+               class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:w-1/3 shadow-sm sm:text-sm border-gray-300 rounded-md">
+        <p class="mt-1 text-xs text-gray-500">사용자 한 명이 하루에 이미지를 합성할 수 있는 최대 횟수입니다. (0 이상)</p>
+    </div>
+
+    {# 워터마크 적용 여부 #}
+    <div>
+        <label for="apply_watermark" class="block text-sm font-medium text-gray-700">결과 이미지에 워터마크 적용</label>
+        <select id="apply_watermark" name="apply_watermark"
+                class="mt-1 block w-full sm:w-1/3 pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+            <option value="true" {% if settings.apply_watermark %}selected{% endif %}>예 (활성화)</option>
+            <option value="false" {% if not settings.apply_watermark %}selected{% endif %}>아니요 (비활성화)</option>
+        </select>
+         <p class="mt-1 text-xs text-gray-500">합성 결과 이미지에 워터마크 (static/images/watermark.png)를 적용할지 여부를 설정합니다.</p>
+    </div>
+
+    {# 저장 버튼 #}
+    <div class="pt-4">
+        <button type="submit" id="save-settings-button"
+                class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-wait">
+             <span class="button-text">설정 저장</span>
+             <span class="loading-spinner hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" style="display: inline-block; vertical-align: middle;"></span>
+        </button>
+    </div>
+
+</form>
+
+{% endblock %} {# admin_content 끝 #}
+
+{% block admin_scripts %}
+<script>
+    // --- DOM Elements ---
+    const settingsForm = document.getElementById('settings-form');
+    const saveButton = document.getElementById('save-settings-button');
+    const buttonText = saveButton.querySelector('.button-text');
+    const loadingSpinner = saveButton.querySelector('.loading-spinner');
+    const messageArea = document.getElementById('settings-message-area');
+
+    // --- Functions ---
+    function showMessage(message, type = 'error') {
+        const alertClass = type === 'success'
+            ? 'bg-green-100 border-green-400 text-green-700'
+            : 'bg-red-100 border-red-400 text-red-700';
+        messageArea.innerHTML = `
+            <div class="px-4 py-3 rounded relative border ${alertClass}" role="alert">
+                <span class="block sm:inline">${message}</span>
+            </div>`;
+        // Auto-hide message after 5 seconds (optional)
+        // setTimeout(() => { messageArea.innerHTML = ''; }, 5000);
+    }
+
+     function hideMessage() {
+         messageArea.innerHTML = '';
+     }
+
+     function setLoading(isLoading) {
+         if (isLoading) {
+             saveButton.disabled = true;
+             buttonText.textContent = '저장 중...';
+             loadingSpinner.classList.remove('hidden');
+         } else {
+             saveButton.disabled = false;
+             buttonText.textContent = '설정 저장';
+             loadingSpinner.classList.add('hidden');
+         }
+     }
+
+    // --- Event Listener ---
+    settingsForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        hideMessage();
+        setLoading(true);
+
+        const maxSynthesesInput = document.getElementById('max_user_syntheses');
+        const applyWatermarkSelect = document.getElementById('apply_watermark');
+
+        const settingsData = {
+            max_user_syntheses: parseInt(maxSynthesesInput.value, 10),
+            apply_watermark: applyWatermarkSelect.value === 'true'
+        };
+
+        // Client-side validation
+        if (isNaN(settingsData.max_user_syntheses) || settingsData.max_user_syntheses < 0) {
+            showMessage('사용자별 일일 최대 합성 횟수는 0 이상의 숫자여야 합니다.', 'error');
+            setLoading(false);
+            maxSynthesesInput.focus();
+            return;
+        }
+
+        try {
+            const response = await fetch('/admin/settings', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 'X-CSRFToken': '...' // CSRF 토큰 필요 시
+                },
+                body: JSON.stringify(settingsData)
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                 // Display specific errors if available
+                 let errorMessage = result.error || `설정 저장 실패 (${response.status})`;
+                 if (result.errors) {
+                     errorMessage += ': ' + Object.entries(result.errors).map(([key, msg]) => `${key}: ${msg}`).join(', ');
+                 }
+                 throw new Error(errorMessage);
+            }
+
+            console.log('Settings updated:', result);
+            showMessage(result.message || '시스템 설정이 성공적으로 저장되었습니다.', 'success');
+            // Update form values if necessary (though usually reflects backend state on next load)
+            if (result.updated) {
+                 maxSynthesesInput.value = result.updated.max_user_syntheses ?? maxSynthesesInput.value;
+                 applyWatermarkSelect.value = (result.updated.apply_watermark === true) ? 'true' : 'false';
+            }
+
+
+        } catch (error) {
+            console.error('Save settings error:', error);
+            showMessage(`설정 저장 실패: ${error.message}`, 'error');
+        } finally {
+            setLoading(false);
+        }
+    });
+
+</script>
+{% endblock %}

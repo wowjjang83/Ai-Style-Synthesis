@@ -6,13 +6,18 @@
     <title>AI Style Synthesis - 이미지 합성</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* Custom styles if needed */
+        /* Custom styles */
         .upload-area {
             border: 2px dashed #ccc;
             padding: 2rem;
             text-align: center;
             cursor: pointer;
             transition: background-color 0.3s ease;
+            min-height: 150px; /* 최소 높이 지정 */
+            display: flex; /* Flexbox 사용 */
+            flex-direction: column; /* 세로 정렬 */
+            justify-content: center; /* 수직 중앙 정렬 */
+            align-items: center; /* 수평 중앙 정렬 */
         }
         .upload-area:hover {
             background-color: #f9f9f9;
@@ -23,7 +28,6 @@
         }
         #loading-indicator {
             display: none; /* Initially hidden */
-            /* Add spinner styles or use a library */
         }
         /* Simple spinner */
         .spinner {
@@ -31,41 +35,96 @@
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            border-left-color: #09f;
+            border-left-color: #4f46e5; /* Indigo color */
             animation: spin 1s ease infinite;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
+        /* Ensure result image maintains aspect ratio */
+        #result-image, #base-model-image {
+             object-fit: cover; /* 이미지 비율 유지하며 채우기 */
+             width: 100%;
+             height: 100%;
+        }
+        .aspect-w-1.aspect-h-1 { /* Tailwind aspect ratio plugin simulation */
+             position: relative;
+             padding-bottom: 100%; /* 1:1 Aspect Ratio */
+         }
+        .aspect-w-1.aspect-h-1 > img {
+             position: absolute;
+             height: 100%;
+             width: 100%;
+             top: 0;
+             right: 0;
+             bottom: 0;
+             left: 0;
+         }
     </style>
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
 
     <div class="container mx-auto p-4 md:p-8 max-w-6xl">
-        <header class="mb-8 flex justify-between items-center">
-            <h1 class="text-3xl font-bold text-gray-800">AI Style Synthesis</h1>
+        <header class="mb-8 flex flex-wrap justify-between items-center gap-4"> {# flex-wrap 추가 #}
+             <a href="{{ url_for('synthesize.index') }}"> {# 메인 페이지 링크 #}
+                <h1 class="text-3xl font-bold text-gray-800 hover:text-indigo-600">AI Style Synthesis</h1>
+             </a>
             <div class="text-right">
+                {# 로그인 상태 표시 (백엔드에서 전달된 데이터 사용) #}
+                {% if session.get('user_id') %}
                 <div id="user-info" class="text-sm text-gray-600 mb-1">
-                    <span id="user-email-display">guest@example.com</span> (<span id="remaining-attempts">3</span>회 남음)
+                    <span id="user-email-display">{{ user_email }}</span>
+                    (<span id="remaining-attempts-display">{{ remaining_attempts }}</span>회 남음)
                 </div>
-                <button id="logout-button" class="bg-red-500 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded">
-                    로그아웃
-                </button>
-                </div>
+                 <form action="{{ url_for('auth.logout') }}" method="POST" style="display: inline;">
+                    <button type="submit" id="logout-button" class="bg-red-500 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded">
+                        로그아웃
+                    </button>
+                 </form>
+                {% else %}
+                 {# 비로그인 시 로그인/회원가입 버튼 (base.html과 동일 로직) #}
+                 <a href="{{ url_for('auth.login') }}" id="login-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
+                     로그인
+                 </a>
+                 <a href="{{ url_for('auth.register') }}" id="register-button" class="bg-green-500 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded">
+                     회원가입
+                 </a>
+                {% endif %}
+            </div>
         </header>
+
+        {# 플래시 메시지 표시 영역 #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-6"> {# 헤더 아래, 메인 컨텐츠 위에 표시 #}
+                {% for category, message in messages %}
+                    <div class="px-4 py-3 rounded relative
+                        {% if category == 'error' %} bg-red-100 border border-red-400 text-red-700
+                        {% elif category == 'warning' %} bg-yellow-100 border border-yellow-400 text-yellow-700
+                        {% elif category == 'success' %} bg-green-100 border border-green-400 text-green-700
+                        {% else %} bg-blue-100 border border-blue-400 text-blue-700 {% endif %}"
+                         role="alert">
+                        <span class="block sm:inline">{{ message }}</span>
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">기본 모델</h2>
                 <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
-                     <img id="base-model-image" src="https://placehold.co/512x512/cccccc/666666?text=Base+Model" alt="기본 모델" class="object-cover w-full h-full">
+                     {# 활성 기본 모델 이미지 표시 (백엔드에서 전달된 URL 사용) #}
+                    <img id="base-model-image" src="{{ base_model_image_url }}" alt="기본 모델"
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/cccccc/666666?text=Base+Model+Load+Error';"> {# 이미지 로드 실패 시 대체 텍스트 #}
                 </div>
                 <p class="text-sm text-gray-500 mt-2 text-center">현재 적용되는 기본 모델입니다.</p>
             </div>
 
-            <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="bg-white p-6 rounded-lg shadow-md flex flex-col"> {# flex flex-col 추가 #}
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">아이템 선택 및 업로드</h2>
 
                 <div class="mb-4">
@@ -77,51 +136,58 @@
                         <option value="bag">가방 (Bag)</option>
                         <option value="accessory">액세서리 (Accessory)</option>
                         <option value="hair">헤어 (Hair)</option>
-                        </select>
+                    </select>
                 </div>
 
-                <div class="mb-4">
+                <div class="mb-4 flex-grow"> {# flex-grow 추가 #}
                     <label for="item-image-upload" class="block text-sm font-medium text-gray-700 mb-1">아이템 이미지:</label>
                     <div id="upload-area" class="upload-area rounded-md">
                         <input type="file" id="item-image-upload" accept="image/png, image/jpeg, image/jpg" class="hidden">
-                        <p id="upload-prompt" class="text-gray-500">여기에 이미지를 드래그하거나 클릭하여 업로드하세요.<br>(PNG, JPG, JPEG)</p>
-                        <div id="image-preview-container" class="mt-4 hidden">
-                            <img id="image-preview" src="#" alt="업로드 미리보기" class="max-h-40 mx-auto rounded">
-                            <button id="remove-image-button" class="mt-2 text-xs text-red-600 hover:text-red-800">이미지 제거</button>
+                        <div id="upload-content"> {# 내용을 감싸는 div 추가 #}
+                            <p id="upload-prompt" class="text-gray-500">여기에 이미지를 드래그하거나<br>클릭하여 업로드하세요.<br>(PNG, JPG, JPEG, 최대 5MB)</p>
+                            <div id="image-preview-container" class="mt-4 hidden">
+                                <img id="image-preview" src="#" alt="업로드 미리보기" class="max-h-40 mx-auto rounded">
+                                <button id="remove-image-button" class="mt-2 text-xs text-red-600 hover:text-red-800">이미지 제거</button>
+                            </div>
                         </div>
                     </div>
                      <p class="text-xs text-gray-500 mt-1">팁: 배경이 없거나 단색인 이미지가 더 좋은 결과를 얻을 수 있습니다.</p>
                 </div>
 
-                <button id="synthesize-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition duration-150 ease-in-out disabled:opacity-50" disabled>
-                    합성하기
-                </button>
-                 <div id="loading-indicator" class="mt-4 flex justify-center items-center">
-                    <div class="spinner"></div>
-                    <p class="ml-2 text-gray-600">이미지 합성 중...</p>
+                 <div id="error-message-area" class="mb-4 px-4 py-3 rounded relative bg-red-100 border border-red-400 text-red-700 hidden" role="alert">
+                     <strong class="font-bold">오류:</strong>
+                     <span id="error-message-content" class="block sm:inline"></span>
+                 </div>
+
+                <div class="mt-auto"> {# 버튼을 하단에 위치시키기 위해 mt-auto 추가 #}
+                    <button id="synthesize-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center" disabled>
+                         <span class="button-text">합성하기</span>
+                         <span class="loading-spinner hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white ml-2"></span>
+                    </button>
+                     <div id="loading-indicator" class="mt-2 text-center text-gray-600 hidden">
+                        <p>이미지 합성 중... (최대 1분 정도 소요될 수 있습니다)</p>
+                    </div>
                 </div>
             </div>
 
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">합성 결과</h2>
                 <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
-                    <img id="result-image" src="https://placehold.co/512x512/e0e0e0/999999?text=Result" alt="합성 결과" class="object-cover w-full h-full">
+                    <img id="result-image" src="https://placehold.co/512x512/e0e0e0/999999?text=Result" alt="합성 결과"
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/ffdddd/cc0000?text=Result+Load+Error';"> {# 결과 로드 실패 시 #}
                 </div>
                  <div id="result-actions" class="mt-4 text-center hidden">
-                    <button id="download-button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                        결과 다운로드
-                    </button>
-                    </div>
+                    <a id="download-link" href="#" download="synthesized_image.png"> {# 다운로드 링크 #}
+                        <button id="download-button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                            결과 다운로드
+                        </button>
+                    </a>
+                 </div>
                  <p id="result-placeholder" class="text-sm text-gray-500 mt-2 text-center">합성 결과가 여기에 표시됩니다.</p>
             </div>
 
-        </div> <div id="error-message-area" class="mt-6 p-4 bg-red-100 border border-red-400 text-red-700 rounded-md hidden" role="alert">
-            <strong class="font-bold">오류:</strong>
-            <span id="error-message-content" class="block sm:inline"></span>
-        </div>
-
-    </div> <script>
-        // Basic frontend logic (will be moved to main.js)
+        </div> </div> <script>
+        // --- DOM Element References ---
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('item-image-upload');
         const uploadPrompt = document.getElementById('upload-prompt');
@@ -129,51 +195,40 @@
         const previewImage = document.getElementById('image-preview');
         const removeButton = document.getElementById('remove-image-button');
         const synthesizeButton = document.getElementById('synthesize-button');
+        const buttonText = synthesizeButton.querySelector('.button-text');
+        const buttonSpinner = synthesizeButton.querySelector('.loading-spinner');
         const resultImage = document.getElementById('result-image');
         const resultActions = document.getElementById('result-actions');
+        const downloadLink = document.getElementById('download-link');
         const resultPlaceholder = document.getElementById('result-placeholder');
-        const loadingIndicator = document.getElementById('loading-indicator');
+        const loadingIndicator = document.getElementById('loading-indicator'); // Text indicator
         const errorMessageArea = document.getElementById('error-message-area');
         const errorMessageContent = document.getElementById('error-message-content');
+        const remainingAttemptsSpan = document.getElementById('remaining-attempts-display');
+        const itemTypeSelect = document.getElementById('item-type');
 
         let uploadedFile = null; // Store the uploaded file object
 
+        // --- Constants ---
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+
         // --- Event Listeners ---
-
-        // Trigger file input click when upload area is clicked
         uploadArea.addEventListener('click', () => fileInput.click());
-
-        // Handle file selection
         fileInput.addEventListener('change', handleFileSelect);
-
-        // Handle drag & drop
         uploadArea.addEventListener('dragover', handleDragOver);
         uploadArea.addEventListener('dragleave', handleDragLeave);
         uploadArea.addEventListener('drop', handleDrop);
-
-        // Remove uploaded image
         removeButton.addEventListener('click', removeImage);
-
-        // Synthesize button click (Placeholder for API call)
         synthesizeButton.addEventListener('click', handleSynthesize);
 
         // --- Functions ---
-
         function handleFileSelect(event) {
             const file = event.target.files[0];
-            if (file && file.type.startsWith('image/')) {
-                displayPreview(file);
-                uploadedFile = file; // Store the file
-                synthesizeButton.disabled = false; // Enable synthesize button
-                hideError(); // Hide any previous errors
-            } else {
-                showError("이미지 파일(PNG, JPG, JPEG)만 업로드 가능합니다.");
-                removeImage(); // Clear if invalid file type
-            }
+            processSelectedFile(file);
         }
 
         function handleDragOver(event) {
-            event.preventDefault(); // Prevent default browser behavior
+            event.preventDefault();
             uploadArea.classList.add('dragover');
         }
 
@@ -183,43 +238,53 @@
         }
 
         function handleDrop(event) {
-            event.preventDefault(); // Prevent default browser behavior
+            event.preventDefault();
             uploadArea.classList.remove('dragover');
             const file = event.dataTransfer.files[0];
-            if (file && file.type.startsWith('image/')) {
-                displayPreview(file);
-                uploadedFile = file; // Store the file
-                synthesizeButton.disabled = false; // Enable synthesize button
-                hideError(); // Hide any previous errors
-                 // Manually set the file input's files property for consistency (optional)
+            processSelectedFile(file);
+        }
+
+        function processSelectedFile(file) {
+             hideError(); // Clear previous errors first
+             if (file && file.type.startsWith('image/')) {
+                 if (file.size > MAX_FILE_SIZE) {
+                     showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
+                     removeImage(); // Clear selection if too large
+                     return;
+                 }
+                 displayPreview(file);
+                 uploadedFile = file;
+                 updateSynthesizeButtonState(); // Update button state based on file and attempts
+                 // Manually set the file input's files property (optional)
                  const dataTransfer = new DataTransfer();
                  dataTransfer.items.add(file);
                  fileInput.files = dataTransfer.files;
-
-            } else {
-                 showError("이미지 파일(PNG, JPG, JPEG)만 드롭 가능합니다.");
+             } else if (file) { // File exists but is not an image
+                 showError("이미지 파일(PNG, JPG, JPEG)만 업로드 가능합니다.");
+                 removeImage(); // Clear selection if not an image
+             } else { // No file selected/dropped
                  removeImage();
-            }
-        }
+             }
+         }
 
         function displayPreview(file) {
             const reader = new FileReader();
             reader.onload = function(e) {
                 previewImage.src = e.target.result;
                 previewContainer.classList.remove('hidden');
-                uploadPrompt.classList.add('hidden'); // Hide the prompt text
+                uploadPrompt.classList.add('hidden');
             }
             reader.readAsDataURL(file);
         }
 
         function removeImage() {
-            fileInput.value = ''; // Clear the file input
+            fileInput.value = ''; // Clear the file input is crucial
             previewImage.src = '#';
             previewContainer.classList.add('hidden');
-            uploadPrompt.classList.remove('hidden'); // Show the prompt text
-            synthesizeButton.disabled = true; // Disable synthesize button
-            uploadedFile = null; // Clear stored file
-            hideError(); // Hide any errors related to previous upload
+            uploadPrompt.classList.remove('hidden');
+            uploadedFile = null;
+            updateSynthesizeButtonState(); // Update button state
+            hideError();
         }
 
         async function handleSynthesize() {
@@ -227,82 +292,111 @@
                 showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
                 return;
             }
+            if (synthesizeButton.disabled) {
+                 // Handle cases where button is disabled (e.g., no attempts left)
+                 let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
+                 if (isNaN(currentAttempts) || currentAttempts <= 0) {
+                     showError("합성 횟수를 모두 사용했습니다.");
+                 } else {
+                     showError("합성을 진행할 수 없습니다."); // Generic message
+                 }
+                 return;
+             }
 
-            const itemTypeSelect = document.getElementById('item-type');
             const itemType = itemTypeSelect.value;
 
-            // Show loading indicator
-            loadingIndicator.style.display = 'flex';
-            synthesizeButton.disabled = true; // Disable button during processing
-            hideError(); // Hide previous errors
-            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...'; // Placeholder during processing
-            resultActions.classList.add('hidden');
+            // --- Start Loading State ---
+            setLoadingState(true);
+            hideError();
+            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...'; // Placeholder
+            resultActions.classList.add('hidden'); // Hide download button
             resultPlaceholder.classList.remove('hidden');
+            resultPlaceholder.textContent = '이미지 합성 중...';
 
-
-            // --- Prepare data for API call ---
+            // --- Prepare FormData ---
             const formData = new FormData();
             formData.append('item_image', uploadedFile);
             formData.append('item_type', itemType);
 
             console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
 
-            // --- API Call (Simulated with setTimeout) ---
+            // --- API Call ---
             try {
-                // Replace with actual fetch call to '/synthesize/web'
-                // const response = await fetch('/synthesize/web', {
-                //     method: 'POST',
-                //     body: formData,
-                //     // Add headers if needed (e.g., for CSRF token if using Flask-WTF)
-                // });
+                const response = await fetch('/synthesize/web', {
+                    method: 'POST',
+                    body: formData,
+                    // 'Content-Type' is automatically set by browser for FormData
+                    // headers: { 'X-CSRFToken': '...' } // Add if CSRF needed
+                });
 
-                // // Check response status
-                // if (!response.ok) {
-                //     const errorData = await response.json().catch(() => ({ error: '서버 응답 처리 중 오류 발생' }));
-                //     throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-                // }
+                const result = await response.json(); // Try to parse JSON regardless of status
 
-                // const result = await response.json();
+                if (!response.ok) {
+                    // Throw an error with the message from backend if available
+                    throw new Error(result.error || `HTTP error! status: ${response.status}`);
+                }
 
-                // --- Simulated successful response ---
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Simulate network delay
-                const simulatedResult = {
-                    message: "Synthesis successful!",
-                    // In a real scenario, the backend would return a URL to the saved image
-                    // For now, we'll just use the uploaded image preview as a placeholder result
-                    output_file_url: previewImage.src // Placeholder! Replace with actual result URL
-                };
-                 console.log("Simulated API Result:", simulatedResult);
+                // --- Process Success ---
+                console.log("API Result:", result);
+                 if (result.output_file_url) {
+                     resultImage.src = result.output_file_url;
+                     downloadLink.href = result.output_file_url; // Set download link URL
+                     // Optionally set download filename based on result if provided
+                     // downloadLink.download = `synthesis_${user_id}_${itemType}.png`;
+                     resultActions.classList.remove('hidden');
+                     resultPlaceholder.classList.add('hidden');
 
-                // --- Process successful result ---
-                 // Update result image (replace placeholder URL with actual result)
-                 resultImage.src = simulatedResult.output_file_url || 'https://placehold.co/512x512/ff0000/ffffff?text=Error+Loading+Result'; // Fallback placeholder
-                 resultActions.classList.remove('hidden'); // Show download button
-                 resultPlaceholder.classList.add('hidden'); // Hide placeholder text
-
-                 // Update remaining attempts (requires another API call to /me or similar)
-                 // For now, just decrement visually (not accurate)
-                 const attemptsSpan = document.getElementById('remaining-attempts');
-                 let currentAttempts = parseInt(attemptsSpan.textContent);
-                 if (!isNaN(currentAttempts) && currentAttempts > 0) {
-                    attemptsSpan.textContent = currentAttempts - 1;
+                     // Update remaining attempts display
+                     if (result.remaining_attempts !== undefined) {
+                         remainingAttemptsSpan.textContent = result.remaining_attempts;
+                         updateSynthesizeButtonState(); // Update button based on new count
+                     }
+                     // Optionally show a success message
+                     // showMessage('합성에 성공했습니다!', 'success'); // Can be noisy
+                 } else {
+                     throw new Error("합성 결과 URL을 받지 못했습니다."); // Should not happen on success
                  }
 
-
             } catch (error) {
+                // --- Process Error ---
                 console.error('Synthesis Error:', error);
                 showError(`합성 중 오류 발생: ${error.message}`);
-                // Reset result area on error
                 resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
                 resultActions.classList.add('hidden');
                 resultPlaceholder.classList.remove('hidden');
                 resultPlaceholder.textContent = '합성에 실패했습니다.';
-
             } finally {
-                // Hide loading indicator and re-enable button
-                loadingIndicator.style.display = 'none';
-                 // Re-enable button only if there's a file selected
-                 synthesizeButton.disabled = !uploadedFile;
+                // --- End Loading State ---
+                setLoadingState(false);
+            }
+        }
+
+        // --- UI Helper Functions ---
+        function setLoadingState(isLoading) {
+             if (isLoading) {
+                 synthesizeButton.disabled = true;
+                 buttonText.textContent = '처리중'; // Shorter text
+                 buttonSpinner.classList.remove('hidden');
+                 loadingIndicator.classList.remove('hidden'); // Show text indicator
+             } else {
+                 buttonText.textContent = '합성하기';
+                 buttonSpinner.classList.add('hidden');
+                 loadingIndicator.classList.add('hidden'); // Hide text indicator
+                 updateSynthesizeButtonState(); // Re-evaluate button state after loading
+             }
+         }
+
+        function updateSynthesizeButtonState() {
+            let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
+            const hasAttempts = !isNaN(currentAttempts) && currentAttempts > 0;
+            const canSynthesize = uploadedFile && hasAttempts;
+
+            synthesizeButton.disabled = !canSynthesize;
+
+            if (!hasAttempts) {
+                buttonText.textContent = '횟수 초과';
+            } else {
+                 buttonText.textContent = '합성하기';
             }
         }
 
@@ -316,10 +410,10 @@
             errorMessageContent.textContent = '';
         }
 
-        // Initial state check
-        if (!uploadedFile) {
-            synthesizeButton.disabled = true;
-        }
+        // --- Initial Page Load ---
+        document.addEventListener('DOMContentLoaded', () => {
+             updateSynthesizeButtonState(); // Set initial button state
+        });
 
     </script>
 
