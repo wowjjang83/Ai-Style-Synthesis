@@ -146,3 +146,18 @@ EXECUTE FUNCTION trigger_set_timestamp();
 -- GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO your_app_user;
 
 -- End of script
+
+-- 테이블 항목 전체삭제
+-- delete from base_models;
+
+-- 테이블 항목삭제
+-- delete from base_models where id=1;
+
+-- 예시: 베이스 모델 추가 및 활성화
+INSERT INTO base_models (name, image_url, is_active, prompt) VALUES
+('기본 여성 모델', '/app/static/images/base_image.jpg', TRUE, 'A photo of a young korean woman');
+-- '/path/to/your/base_image.jpg' 부분은 실제 이미지 파일의 **유효한 경로 또는 URL**로 반드시 변경해야 합니다!
+-- 로컬 파일 경로를 사용하는 경우, Flask 애플리케이션이 해당 파일에 접근할 수 있어야 합니다.
+
+-- 항목 업데이트(수정)
+UPDATE base_models SET image_url = '/static/images/base_image.jpg' WHERE id = 2;
