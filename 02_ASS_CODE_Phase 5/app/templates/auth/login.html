@@ -13,8 +13,8 @@
             <span id="error-message-content" class="block sm:inline"></span>
         </div>
 
-        {# 로그인 폼 #}
-        <form method="POST" action="{{ url_for('auth.login') }}" id="login-form">
+        {# 로그인 폼 (action 불필요) #}
+        <form id="login-form"> {# action 제거 또는 #으로 변경 가능 #}
              {# CSRF 보호 기능 사용 시 토큰 필드 추가 #}
             <div class="mb-4">
                 <label for="email" class="block text-sm font-medium text-gray-700 mb-1">이메일 주소</label>
@@ -66,26 +66,43 @@
         const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
 
+        // --- 수정: 현재 URL에서 'next' 파라미터 가져오기 ---
+        const currentUrlParams = new URLSearchParams(window.location.search);
+        const nextParamValue = currentUrlParams.get('next');
+
+        // --- 수정: fetch 요청 URL 구성 ---
+        let fetchUrl = "{{ url_for('auth.login') }}"; // 기본 로그인 POST URL
+        if (nextParamValue) {
+            // next 파라미터 값이 있으면 URL에 추가
+            fetchUrl += `?next=${encodeURIComponent(nextParamValue)}`;
+            console.log(`Workspace URL with next param: ${fetchUrl}`);
+        } else {
+             console.log(`Workspace URL without next param: ${fetchUrl}`);
+        }
+
         try {
-            const response = await fetch("{{ url_for('auth.login') }}", {
+            // 수정: 구성된 fetchUrl 사용
+            const response = await fetch(fetchUrl, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    // 'X-CSRFToken': '...' // CSRF 토큰 필요 시 추가
+                    // 'X-CSRFToken': '...'
                 },
                 body: JSON.stringify({ email: email, password: password })
             });
 
             const result = await response.json();
 
-            if (response.ok) { // HTTP 상태 코드가 200-299 인 경우
+            if (response.ok) {
                 console.log('Login successful:', result);
-                // 로그인 성공 시 메인 페이지로 리디렉션
-                window.location.href = "{{ url_for('synthesize.index') }}";
-                // 백엔드에서 flash 메시지를 사용한다면 별도 처리 불필요
-                // alert(result.message || '로그인 성공!');
+                if (result.redirect_url) {
+                    console.log('Redirecting to:', result.redirect_url);
+                    window.location.href = result.redirect_url;
+                } else {
+                    console.warn('Redirect URL not found in response, redirecting to default.');
+                    window.location.href = "{{ url_for('synthesize.index') }}";
+                }
             } else {
-                // 로그인 실패 시 (401 Unauthorized 등)
                 console.error('Login failed:', result);
                 showError(result.error || '로그인 처리 중 오류가 발생했습니다.');
             }
@@ -94,11 +111,11 @@
             console.error('Network or other error:', error);
             showError('로그인 요청 중 오류가 발생했습니다. 네트워크 상태를 확인해주세요.');
         } finally {
-            // 로딩 상태 종료
             setLoading(false);
         }
     });
 
+    // setLoading, showError, hideError 함수는 변경 없음
     function setLoading(isLoading) {
         if (isLoading) {
             submitButton.disabled = true;
