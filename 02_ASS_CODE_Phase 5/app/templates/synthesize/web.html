@@ -65,6 +65,17 @@
          #upload-error-message-area:not(.hidden) {
              display: block !important;
          }
+         /* --- 추가: 이미지 결과 모달 스타일 --- */
+        /* 모달 배경 */
+        .modal-overlay {
+            transition: opacity 0.3s ease;
+        }
+        /* 모달 내용 (이미지 크기 조절) */
+        .modal-content img {
+            max-width: 90vw; /* 화면 너비의 90% */
+            max-height: 85vh; /* 화면 높이의 85% */
+            object-fit: contain; /* 이미지 비율 유지 */
+        }
     </style>
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
@@ -181,14 +192,17 @@
                 </div>
             </div>
 
+            {# --- Synthesis Result Column (수정됨) --- #}
             <div class="bg-white p-6 rounded-lg shadow-md">
                 <h2 class="text-xl font-semibold mb-4 text-gray-700">합성 결과</h2>
                 <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
+                    {# --- 수정: 결과 이미지에 클릭 가능 스타일 추가 --- #}
                     <img id="result-image" src="https://placehold.co/512x512/e0e0e0/999999?text=Result" alt="합성 결과"
-                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/ffdddd/cc0000?text=Result+Load+Error';"> {# 결과 로드 실패 시 #}
+                         class="cursor-pointer hover:opacity-90 transition-opacity duration-200" {# 커서 변경, 호버 효과 추가 #}
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/ffdddd/cc0000?text=Result+Load+Error';">
                 </div>
                  <div id="result-actions" class="mt-4 text-center hidden">
-                    <a id="download-link" href="#" download="synthesized_image.png"> {# 다운로드 링크 #}
+                    <a id="download-link" href="#" download="synthesized_image.png">
                         <button id="download-button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                             결과 다운로드
                         </button>
@@ -196,8 +210,24 @@
                  </div>
                  <p id="result-placeholder" class="text-sm text-gray-500 mt-2 text-center">합성 결과가 여기에 표시됩니다.</p>
             </div>
-
         </div>
+
+        {# --- 추가: 결과 이미지 모달 --- #}
+        <div id="result-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            {# 모달 배경 오버레이 #}
+            <div id="result-modal-overlay" class="fixed inset-0 bg-black bg-opacity-75 modal-overlay"></div>
+
+            {# 모달 컨텐츠 #}
+            <div class="relative bg-white rounded-lg shadow-xl overflow-hidden modal-content mx-auto">
+                {# 모달 닫기 버튼 #}
+                <button id="close-result-modal-button" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800 z-10 bg-white bg-opacity-50 rounded-full p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+                {# 모달에 표시될 이미지 #}
+                <img id="modal-image" src="" alt="합성 결과 크게 보기" class="block">
+            </div>
+        </div>
+        {# --- 결과 이미지 모달 끝 --- #}
     </div>
 
     <script>
@@ -221,13 +251,20 @@
         const remainingAttemptsSpan = document.getElementById('remaining-attempts-display');
         const itemTypeSelect = document.getElementById('item-type');
 
+        // --- 추가: 모달 관련 DOM 요소 ---
+        const resultModal = document.getElementById('result-modal');
+        const resultModalOverlay = document.getElementById('result-modal-overlay');
+        const modalImage = document.getElementById('modal-image'); // 모달 안의 이미지 태그
+        const closeResultModalButton = document.getElementById('close-result-modal-button');
+
         let uploadedFile = null;
+        const defaultResultImageSrc = 'https://placehold.co/512x512/e0e0e0/999999?text=Result'; // 기본 플레이스홀더 src
 
         // --- Constants ---
         const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
         const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
 
-        // --- Event Listeners ---
+        // --- Event Listeners (기존 + 모달 관련 추가) ---
         uploadArea.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', handleFileSelect);
         uploadArea.addEventListener('dragover', handleDragOver);
@@ -239,6 +276,30 @@
             removeImage();
         });
         synthesizeButton.addEventListener('click', handleSynthesize);
+
+        // --- 추가: 모달 열기 이벤트 리스너 (결과 이미지 클릭 시) ---
+        resultImage.addEventListener('click', () => {
+            // 현재 결과 이미지의 src가 플레이스홀더가 아닌 실제 이미지 URL일 때만 모달 열기
+            if (resultImage.src && resultImage.src !== defaultResultImageSrc && !resultImage.src.includes('placehold.co')) {
+                modalImage.src = resultImage.src; // 모달 이미지 src 설정
+                resultModal.classList.remove('hidden'); // 모달 보이기
+                resultModal.classList.add('flex'); // Flexbox 정렬 활성화
+            } else {
+                console.log("No valid result image to show in modal.");
+            }
+        });
+
+        // --- 추가: 모달 닫기 함수 (먼저 정의) ---
+        function closeResultModal() {
+            resultModal.classList.add('hidden'); // 모달 숨기기
+            resultModal.classList.remove('flex');
+            modalImage.src = ""; // 모달 이미지 src 초기화 (메모리 누수 방지)
+        }
+        
+        // --- 추가: 모달 닫기 이벤트 리스너 ---
+        closeResultModalButton.addEventListener('click', closeResultModal);
+        resultModalOverlay.addEventListener('click', closeResultModal); // 배경 클릭 시 닫기
+
 
         // --- Functions ---
         function handleFileSelect(event) {
@@ -319,91 +380,57 @@
             console.log("[Image Removed]");
         }
 
-        // '합성하기' 버튼 클릭 시 실행될 함수
+        // --- handleSynthesize 함수 수정: 성공 시 resultImage src 업데이트 확인 ---
         async function handleSynthesize() {
-             hideError(); // Hide previous errors
-
-            // Check if file is uploaded
-            if (!uploadedFile) {
-                showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
+            hideError();
+           if (!uploadedFile) { showError("합성할 아이템 이미지를 먼저 업로드해주세요."); return; }
+           if (synthesizeButton.disabled && !buttonText.textContent.includes('처리중')) {
+                let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
+                if (isNaN(currentAttempts) || currentAttempts <= 0) { showError("합성 횟수를 모두 사용했습니다."); }
+                else { showError("합성을 진행할 수 없습니다."); }
                 return;
             }
-            // Check if button is disabled (e.g., no attempts left)
-            if (synthesizeButton.disabled) {
-                 let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
-                 if (isNaN(currentAttempts) || currentAttempts <= 0) {
-                     showError("합성 횟수를 모두 사용했습니다.");
-                 } else {
-                     showError("합성을 진행할 수 없습니다."); // Generic message if disabled for other reasons
-                 }
-                 return;
-             }
-
-            const itemType = itemTypeSelect.value; // Get selected item type
-
-            // --- Start Loading State ---
-            setLoadingState(true);
-            // Reset result area
-            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
-            resultActions.classList.add('hidden'); // Hide download button
-            resultPlaceholder.classList.remove('hidden'); // Show placeholder
-            resultPlaceholder.textContent = '이미지 합성 중...'; // Update placeholder text
-
-            // --- Prepare FormData ---
-            const formData = new FormData();
-            formData.append('item_image', uploadedFile);
-            formData.append('item_type', itemType);
-
-            console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
-
-            // --- API Call ---
-            try {
-                const response = await fetch('/synthesize/web', {
-                    method: 'POST',
-                    body: formData,
-                });
-
-                const result = await response.json(); // Parse JSON response
-
-                // Check response status
-                if (!response.ok) {
-                    // Use error message from backend response if available
-                    throw new Error(result.error || `HTTP error! status: ${response.status}`);
+           const itemType = itemTypeSelect.value;
+           setLoadingState(true);
+           resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
+           resultActions.classList.add('hidden');
+           resultPlaceholder.classList.remove('hidden');
+           resultPlaceholder.textContent = '이미지 합성 중...';
+           const formData = new FormData();
+           formData.append('item_image', uploadedFile);
+           formData.append('item_type', itemType);
+           console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
+           try {
+               const response = await fetch('/synthesize/web', { method: 'POST', body: formData });
+               const result = await response.json();
+               if (!response.ok) { throw new Error(result.error || `HTTP error! status: ${response.status}`); }
+               console.log("API Result:", result);
+                if (result.output_file_url) {
+                    // --- 중요: resultImage src 업데이트 ---
+                    // 타임스탬프 추가하여 캐시 방지
+                    const finalImageUrl = result.output_file_url + '?t=' + new Date().getTime();
+                    resultImage.src = finalImageUrl; // 여기에 새 이미지 URL 할당
+                    downloadLink.href = result.output_file_url;
+                    resultActions.classList.remove('hidden');
+                    resultPlaceholder.classList.add('hidden');
+                    if (result.remaining_attempts !== undefined) {
+                        remainingAttemptsSpan.textContent = result.remaining_attempts;
+                        updateSynthesizeButtonState();
+                    }
+                    // 모달 열기 클릭 리스너는 이미 resultImage에 연결되어 있으므로 별도 처리 불필요
+                } else {
+                    throw new Error("합성 결과 URL을 받지 못했습니다.");
                 }
-
-                // --- Process Success ---
-                console.log("API Result:", result);
-                 if (result.output_file_url) {
-                     // Display result image (add timestamp to prevent caching if needed)
-                     resultImage.src = result.output_file_url + '?t=' + new Date().getTime();
-                     downloadLink.href = result.output_file_url; // Set download link URL
-                     resultActions.classList.remove('hidden'); // Show download button
-                     resultPlaceholder.classList.add('hidden'); // Hide placeholder text
-
-                     // Update remaining attempts display if provided in response
-                     if (result.remaining_attempts !== undefined) {
-                         remainingAttemptsSpan.textContent = result.remaining_attempts;
-                         updateSynthesizeButtonState(); // Update button state based on new count
-                     }
-                 } else {
-                     // This case should ideally not happen if response.ok is true
-                     throw new Error("합성 결과 URL을 받지 못했습니다.");
-                 }
-
-            } catch (error) {
-                // --- Process Error ---
-                console.error('Synthesis Error:', error);
-                // 수정: 합성 오류는 다른 영역에 표시하거나, 여기서도 표시 가능
-                showError(`합성 중 오류 발생: ${error.message}`); // Show error message to user
-                // Update result area to show failure state
-                resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
-                resultActions.classList.add('hidden');
-                resultPlaceholder.classList.remove('hidden');
-                resultPlaceholder.textContent = '합성에 실패했습니다.';
-            } finally {
-                // --- End Loading State ---
-                setLoadingState(false);
-            }
+           } catch (error) {
+               console.error('Synthesis Error:', error);
+               showError(`합성 중 오류 발생: ${error.message}`);
+               resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed'; // 실패 이미지로 변경
+               resultActions.classList.add('hidden');
+               resultPlaceholder.classList.remove('hidden');
+               resultPlaceholder.textContent = '합성에 실패했습니다.';
+           } finally {
+               setLoadingState(false);
+           }
         }
 
         // --- UI Helper Functions ---
