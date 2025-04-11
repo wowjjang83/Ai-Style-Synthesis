@@ -18,10 +18,11 @@ from app.utils.db_utils import (
     get_setting, get_active_base_model, get_todays_usage, increment_usage
 )
 
-# 수정: synthesize_multi_items_single_call 함수 import 추가
+# 수정: classify_item_type 함수 import 추가
 from app.utils.ai_module import (
     synthesize_image, # 단일 합성 (현재 사용 안함)
     synthesize_multi_items_single_call, # 다중 합성 함수
+    classify_item_type, # 아이템 분류 함수 추가
     apply_watermark_func
 )
 
@@ -244,6 +245,70 @@ def synthesize_web_route():
                 except OSError as e: print(f"  - 경고: 임시 파일 삭제 실패 - {e}")
 
 
+# --- 신규: 아이템 분류 API 라우트 ---
+@bp.route('/classify_item', methods=['POST'])
+@login_required
+def classify_item_route():
+    """
+    업로드된 아이템 이미지의 종류를 AI를 사용하여 분류하고 결과를 반환합니다.
+    """
+    print("[Route /classify_item] 아이템 분류 요청 수신")
+
+    # 1. AI 클라이언트 확인
+    ai_client = current_app.config.get('AI_CLIENT')
+    if not ai_client:
+        print("[Route /classify_item] 오류: AI Client 없음")
+        return jsonify({"error": "AI 서비스가 설정되지 않았습니다."}), 503
+
+    # 2. 이미지 파일 확인
+    if 'item_image' not in request.files:
+        print("[Route /classify_item] 오류: 'item_image' 파일 누락")
+        return jsonify({"error": "분류할 이미지 파일('item_image')이 필요합니다."}), 400
+
+    item_file = request.files['item_image']
+    if item_file.filename == '':
+        print("[Route /classify_item] 오류: 파일 이름 없음")
+        return jsonify({"error": "파일이 선택되지 않았습니다."}), 400
+    if not allowed_file(item_file.filename):
+        print(f"[Route /classify_item] 오류: 허용되지 않는 파일 형식 - {item_file.filename}")
+        return jsonify({"error": "허용되지 않는 파일 형식입니다 (PNG, JPG, JPEG만 가능)."}), 400
+
+    # 3. 이미지 임시 저장
+    temp_image_path = None
+    temp_image_fd = -1
+    try:
+        file_ext = os.path.splitext(item_file.filename)[1]
+        # mkstemp로 임시 파일 생성 (파일 디스크립터와 경로 반환)
+        temp_image_fd, temp_image_path = tempfile.mkstemp(suffix=file_ext, prefix='classify_')
+        item_file.save(temp_image_path) # 파일 저장
+        print(f"[Route /classify_item] 분류용 이미지 임시 저장: {temp_image_path}")
+
+        # 4. AI 분류 함수 호출
+        detected_type = classify_item_type(ai_client, temp_image_path)
+
+        # 5. 결과 반환
+        if detected_type:
+            print(f"[Route /classify_item] 분류 결과: {detected_type}")
+            return jsonify({"item_type": detected_type})
+        else:
+            print("[Route /classify_item] 오류: 아이템 종류를 분류할 수 없습니다.")
+            return jsonify({"error": "아이템 종류를 분류할 수 없습니다."}), 400 # 또는 500
+
+    except Exception as e:
+        print(f"[Route /classify_item] 분류 처리 중 오류 발생: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "아이템 분류 중 서버 오류가 발생했습니다."}), 500
+    finally:
+        # 6. 임시 파일 삭제
+        if temp_image_fd != -1: # 파일 디스크립터가 유효하면 닫기 (선택적)
+             try: os.close(temp_image_fd)
+             except OSError: pass
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.remove(temp_image_path)
+                print(f"[Route /classify_item] 임시 파일 삭제 완료: {temp_image_path}")
+            except OSError as e:
+                print(f"[Route /classify_item] 경고: 임시 파일 삭제 실패 - {e}")
 
 # --- /outputs/<filename> 라우트 ---
 @bp.route('/outputs/<path:filename>')

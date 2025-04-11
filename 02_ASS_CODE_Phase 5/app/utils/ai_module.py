@@ -8,6 +8,7 @@ from PIL import Image, ImageEnhance # Pillow 라이브러리
 from google import genai
 from google.genai import types
 import traceback # 상세 오류 로깅용
+import re # 정규표현식 사용을 위해 추가
 
 # --- 이미지 합성 함수 ---
 # (synthesize_image 함수는 변경 없음 - 이전 코드 유지)
@@ -315,3 +316,97 @@ def apply_watermark_func(image_bytes: bytes, watermark_path: str, opacity: float
         print(f"[AI Module - Watermark] 워터마크 적용 중 예상치 못한 오류 발생: {e}")
         traceback.print_exc()
         return image_bytes # 오류 시 원본 이미지 바이트 반환
+    
+# --- 신규: 아이템 종류 분류 함수 ---
+def classify_item_type(client: genai.Client, image_path: str) -> str | None:
+    """
+    주어진 이미지의 패션 아이템 종류를 AI를 사용하여 분류합니다.
+
+    Args:
+        client (genai.Client): 초기화된 Google AI 클라이언트 객체.
+        image_path (str): 분류할 이미지 파일 경로.
+
+    Returns:
+        str or None: 성공 시 감지된 아이템 종류 문자열 (소문자, 예: 'top'), 실패 시 None.
+    """
+    print(f"[AI Module - Classify] 아이템 종류 분류 시작: {os.path.basename(image_path)}")
+    if not client:
+        print("[AI Module - Classify] 오류: 유효한 AI 클라이언트 객체가 전달되지 않았습니다.")
+        return None
+
+    # 분류 가능한 아이템 종류 목록 (프롬프트 및 결과 검증에 사용)
+    allowed_categories = ['top', 'bottom', 'shoes', 'bag', 'accessory', 'hair']
+    allowed_categories_str = ", ".join(allowed_categories)
+
+    try:
+        # --- 1. 이미지 로드 ---
+        img = None
+        with Image.open(image_path) as img_fp:
+            img = img_fp.copy()
+        print(f"  - 이미지 로드 완료: {os.path.basename(image_path)}")
+
+        # --- 2. 분류용 프롬프트 생성 ---
+        prompt_parts = [
+            img, # 이미지 전달
+            ( # 텍스트 프롬프트
+                f"Analyze the image and identify the main fashion item shown. "
+                f"Choose the most appropriate category ONLY from the following list: {allowed_categories_str}. "
+                f"Respond with ONLY the single category name in lowercase. For example, if it's a t-shirt, respond with 'top'."
+            )
+        ]
+
+        # --- 3. API 호출 ---
+        # 분류 작업에는 이미지 생성이 아닌 텍스트 응답만 필요
+        target_model_name = "gemini-pro-vision" # Vision 모델 명시적 사용 시도 (또는 기존 모델 사용)
+        # 참고: gemini-pro-vision 모델은 generate_content 에서 바로 사용 가능할 수 있음. 안되면 기존 모델 사용.
+        # 만약 gemini-pro-vision 사용이 복잡하다면, 이전처럼 gemini-2.0-flash-exp-image-generation 사용 가능
+        print(f"[AI Module - Classify] '{target_model_name}' 모델 API 호출...")
+        try:
+            response = client.models.generate_content(
+                model=target_model_name,
+                contents=prompt_parts,
+                # 분류 작업이므로 텍스트 응답만 필요
+                # config=types.GenerateContentConfig(response_modalities=['Text']) # Text만 요청하거나 기본값 사용
+            )
+        except Exception as model_call_err:
+            # 만약 gemini-pro-vision 호출 실패 시, 기존 모델로 재시도 (선택적)
+            print(f"  - 경고: '{target_model_name}' 호출 실패 ({model_call_err}), 기존 모델로 재시도...")
+            target_model_name = "gemini-2.0-flash-exp-image-generation" # 기존 이미지 생성 모델 사용
+            response = client.models.generate_content(
+                model=target_model_name,
+                contents=prompt_parts
+            )
+
+        print("[AI Module - Classify] API 호출 완료.")
+
+        # --- 4. 응답 텍스트 추출 및 처리 ---
+        detected_type = None
+        if response.text:
+            # 응답 텍스트에서 소문자 알파벳만 추출하고 앞뒤 공백 제거
+            # 예: "top", "  bottom  ", "shoes." -> "top", "bottom", "shoes"
+            cleaned_text = re.sub(r'[^a-z]', '', response.text.lower().strip())
+            print(f"  - AI 응답 텍스트 (Raw): '{response.text}'")
+            print(f"  - AI 응답 텍스트 (Cleaned): '{cleaned_text}'")
+
+            # 허용된 카테고리 목록에 있는지 확인
+            if cleaned_text in allowed_categories:
+                detected_type = cleaned_text
+                print(f"[AI Module - Classify] 분류 성공: '{detected_type}'")
+            else:
+                print(f"[AI Module - Classify] 경고: AI 응답이 허용된 카테고리({allowed_categories_str})에 없습니다.")
+                # 가장 유사한 단어를 찾는 로직 추가 가능 (선택적)
+        else:
+            print("[AI Module - Classify] 오류: AI 응답에서 텍스트를 추출할 수 없습니다.")
+            # 상세 응답 내용 로깅
+            try: print(f"  - Full Response: {response}")
+            except: pass
+
+        return detected_type
+
+    except FileNotFoundError:
+        print(f"[AI Module - Classify] 오류: 이미지 파일을 찾을 수 없습니다 - {image_path}")
+        return None
+    except Exception as e:
+        print(f"[AI Module - Classify] 분류 중 예상치 못한 오류 발생: {e}")
+        traceback.print_exc()
+        return None

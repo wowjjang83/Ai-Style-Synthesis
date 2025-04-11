@@ -96,6 +96,15 @@
                                 <option value="">-- 선택 --</option>
                                 <option value="top">상의</option><option value="bottom">하의</option><option value="shoes">신발</option><option value="bag">가방</option><option value="accessory">액세서리</option><option value="hair">헤어</option>
                             </select>
+                            {# --- 추가: 분류 상태 표시 영역 --- #}
+                            <span id="classification-indicator-{{ i }}" class="classification-indicator ml-2 text-xs text-gray-500 hidden">
+                                <svg class="animate-spin h-4 w-4 text-indigo-600 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                분류중...
+                            </span>
+                            {# --- 추가 끝 --- #}
                         </div>
                         <div id="upload-area-{{ i }}" class="upload-area rounded-md" data-slot-id="{{ i }}">
                             <input type="file" id="item-image-upload-{{ i }}" name="item_image_{{ i }}" accept="image/png, image/jpeg, image/jpg" class="item-image-upload hidden" data-slot-id="{{ i }}">
@@ -286,23 +295,82 @@
              reader.readAsDataURL(file);
         }
 
-        function processSelectedFile(file, slotId, keepError = false) {
+        // --- 수정: processSelectedFile 함수 내 API 호출 추가 ---
+        async function processSelectedFile(file, slotId, keepError = false) { // async 키워드 추가
             if (slotId === undefined || slotId === null) return;
-            hideError(); // 공통 오류 메시지 숨기기
+            hideError();
+
+            const typeSelect = document.getElementById(`item-type-${slotId}`);
+            const classificationIndicator = document.getElementById(`classification-indicator-${slotId}`);
 
             if (file) {
                 console.log(`[Slot ${slotId}] File selected:`, file.name);
+                // 기본 유효성 검사
                 if (!ALLOWED_MIME_TYPES.includes(file.type)) { showError(`Slot ${slotId+1}: 허용되지 않는 파일 형식입니다.`); removeImage(slotId, true); return; }
                 if (file.size > MAX_FILE_SIZE) { showError(`Slot ${slotId+1}: 파일 크기가 너무 큽니다 (${MAX_FILE_SIZE / 1024 / 1024}MB 이하).`); removeImage(slotId, true); return; }
 
+                // 미리보기 표시
                 displayPreview(file, slotId);
-                if (itemSlotsData[slotId]) { // 데이터 업데이트
-                    itemSlotsData[slotId].file = file;
+                if (itemSlotsData[slotId]) { itemSlotsData[slotId].file = file; }
+                updateSynthesizeButtonState(); // 일단 파일이 있으면 버튼 상태 업데이트 시도
+
+                // --- 추가: 자동 분류 API 호출 ---
+                if (typeSelect && classificationIndicator) {
+                    typeSelect.disabled = true; // 분류 중 타입 변경 방지 (선택적)
+                    classificationIndicator.classList.remove('hidden'); // "분류중..." 표시 보이기
+
+                    const formData = new FormData();
+                    formData.append('item_image', file); // 백엔드에서 받을 이름 'item_image'
+
+                    try {
+                        console.log(`[Slot ${slotId}] Calling classification API...`);
+                        const response = await fetch('/classify_item', {
+                            method: 'POST',
+                            body: formData,
+                            // headers: { 'X-CSRFToken': '...' } // 필요시 CSRF 토큰
+                        });
+
+                        const result = await response.json();
+
+                        if (response.ok && result.item_type) {
+                            console.log(`[Slot ${slotId}] Auto-classified as: ${result.item_type}`);
+                            // 드롭다운 값이 존재하는지 확인 후 설정
+                            const optionExists = Array.from(typeSelect.options).some(opt => opt.value === result.item_type);
+                            if (optionExists) {
+                                typeSelect.value = result.item_type;
+                                // 데이터 배열에도 업데이트
+                                if (itemSlotsData[slotId]) { itemSlotsData[slotId].type = result.item_type; }
+                                updateTypeSelectionRestrictions(); // 다른 슬롯 제한 업데이트
+                                updateSynthesizeButtonState(); // 최종 버튼 상태 업데이트
+                            } else {
+                                console.warn(`[Slot ${slotId}] Classified type '${result.item_type}' not found in dropdown options.`);
+                                // 분류 실패 시 type '' 로 유지하거나 사용자에게 알림
+                                if (itemSlotsData[slotId]) { itemSlotsData[slotId].type = ''; } // 타입 초기화
+                                typeSelect.value = ''; // 드롭다운 초기화
+                            }
+                        } else {
+                            console.warn(`[Slot ${slotId}] Auto-classification failed or invalid type:`, result);
+                            // 분류 실패 시 타입 비워두기
+                            if (itemSlotsData[slotId]) { itemSlotsData[slotId].type = ''; }
+                            typeSelect.value = '';
+                        }
+                    } catch (error) {
+                        console.error(`[Slot ${slotId}] Classification API call failed:`, error);
+                        showError(`Slot ${slotId+1}: 아이템 종류 자동 분류 실패`);
+                        // 오류 발생 시 타입 비워두기
+                        if (itemSlotsData[slotId]) { itemSlotsData[slotId].type = ''; }
+                        typeSelect.value = '';
+                    } finally {
+                        classificationIndicator.classList.add('hidden'); // "분류중..." 표시 숨기기
+                        typeSelect.disabled = false; // 타입 변경 다시 허용
+                    }
                 }
-            } else {
-                removeImage(slotId); // 파일 선택 취소 시 초기화
+                // --- 자동 분류 API 호출 끝 ---
+
+            } else { // 파일 선택 취소 시
+                removeImage(slotId);
             }
-            updateSynthesizeButtonState(); // 합성 버튼 상태 업데이트
+            // updateSynthesizeButtonState(); // API 호출 후 finally 블록 다음 또는 여기서 호출
         }
 
         function handleTypeChange(event) {
