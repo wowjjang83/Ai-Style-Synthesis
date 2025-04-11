@@ -76,55 +76,60 @@
 
 {# 모델 추가/수정 모달 (초기에는 숨김) #}
 <div id="model-modal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-    {# 배경 오버레이 #}
-    <div id="modal-overlay" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
-    {# 모달 컨텐츠 수직 중앙 정렬용 #}
-    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-    {# 모달 패널 #}
-    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-      <form id="model-form">
-        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-          <div class="sm:flex sm:items-start">
-            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">베이스 모델 정보</h3>
-              {# 수정 시 사용될 숨겨진 ID 필드 #}
-              <input type="hidden" id="model-id" name="model_id">
-              {# 폼 입력 필드들 #}
-              <div class="space-y-4">
-                <div>
-                  <label for="model-name" class="block text-sm font-medium text-gray-700">모델 이름 <span class="text-red-500">*</span></label>
-                  <input type="text" name="name" id="model-name" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+      {# 배경 오버레이 #}
+      <div id="modal-overlay" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+      {# 모달 컨텐츠 수직 중앙 정렬용 #}
+      <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+  
+      {# 모달 패널 #}
+      <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+        <form id="model-form">
+          <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+            <div class="sm:flex sm:items-start">
+              <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">베이스 모델 정보</h3>
+                {# 수정 시 사용될 숨겨진 ID 필드 #}
+                <input type="hidden" id="model-id" name="model_id">
+                {# 폼 입력 필드들 #}
+                <div class="space-y-4">
+                  <div>
+                    <label for="model-name" class="block text-sm font-medium text-gray-700">모델 이름 <span class="text-red-500">*</span></label>
+                    <input type="text" name="name" id="model-name" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
+                  </div>
+                  <div>
+                    <label for="model-image-url" class="block text-sm font-medium text-gray-700">이미지 URL <span class="text-red-500">*</span></label>
+                    {# --- 수정: type="url" -> type="text" --- #}
+                    <input type="text" name="image_url" id="model-image-url" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="/static/images/... 또는 http://...">
+                    {# --- 수정: 설명 문구 변경 (이전 제안 반영) --- #}
+                    <p class="mt-1 text-xs text-gray-500">
+                       외부 이미지: 직접 링크 URL (예: https://.../image.jpg)<br>
+                       서버 내 이미지: <b>반드시 app/static/images/ 폴더에 파일 위치 후</b> 경로 입력 (예: /static/images/model.jpg)
+                    </p>
+                  </div>
+                  <div>
+                    <label for="model-prompt" class="block text-sm font-medium text-gray-700">프롬프트 (선택)</label>
+                    <textarea id="model-prompt" name="prompt" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
+                  </div>
+                  {# 모달 내 오류 메시지 영역 #}
+                  <div id="modal-error-area" class="text-red-600 text-sm hidden"></div>
                 </div>
-                <div>
-                  <label for="model-image-url" class="block text-sm font-medium text-gray-700">이미지 URL <span class="text-red-500">*</span></label>
-                  <input type="url" name="image_url" id="model-image-url" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="http://... 또는 /static/images/...">
-                   <p class="mt-1 text-xs text-gray-500">웹 URL 또는 서버 내 정적 파일 경로 (예: /static/images/model.jpg)</p>
-                </div>
-                <div>
-                  <label for="model-prompt" class="block text-sm font-medium text-gray-700">프롬프트 (선택)</label>
-                  <textarea id="model-prompt" name="prompt" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
-                </div>
-                {# 모달 내 오류 메시지 영역 #}
-                <div id="modal-error-area" class="text-red-600 text-sm hidden"></div>
               </div>
             </div>
           </div>
-        </div>
-        {# 모달 버튼 영역 #}
-        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-          <button type="submit" id="save-model-button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-wait">
-            <span class="button-text">저장</span>
-            <span class="loading-spinner hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" style="display: inline-block; vertical-align: middle;"></span>
-          </button>
-          <button type="button" id="cancel-modal-button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
-            취소
-          </button>
-        </div>
-      </form>
+          {# 모달 버튼 영역 #}
+          <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+            <button type="submit" id="save-model-button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-wait">
+              <span class="button-text">저장</span>
+              <span class="loading-spinner hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" style="display: inline-block; vertical-align: middle;"></span>
+            </button>
+            <button type="button" id="cancel-modal-button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+              취소
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
-  </div>
 </div>
 
 {% endblock %} {# admin_content 끝 #}
