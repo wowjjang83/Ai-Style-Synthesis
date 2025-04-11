@@ -1,0 +1,61 @@
+{% extends 'base.html' %} {# 기본 base.html 레이아웃 상속 #}
+
+{% block title %}관리자 페이지 - {{ super() }}{% endblock %} {# 페이지 타이틀에 '관리자 페이지' 추가 #}
+
+{% block head_extra %}
+    {# 관리자 페이지 전용 CSS 또는 JavaScript 링크 추가 가능 #}
+    <style>
+        /* 관리자 페이지 전용 스타일 */
+        .admin-sidebar ul li a:hover {
+            background-color: #e9d5ff; /* light purple on hover */
+        }
+        .admin-sidebar ul li a.active {
+            background-color: #a855f7; /* purple-500 */
+            color: white;
+            font-weight: bold;
+        }
+    </style>
+{% endblock %}
+
+{% block content %} {# 메인 컨텐츠 영역 재정의 #}
+<div class="flex flex-col md:flex-row min-h-[calc(100vh-12rem)]"> {# 높이 조정 #}
+
+    <aside class="w-full md:w-64 bg-white p-4 rounded-lg shadow-md mb-6 md:mb-0 md:mr-6 admin-sidebar flex-shrink-0">
+        <h2 class="text-xl font-semibold mb-4 text-gray-700">관리 메뉴</h2>
+        <ul>
+            <li class="mb-2">
+                {# request.endpoint 를 사용하여 현재 활성 메뉴 표시 #}
+                <a href="{{ url_for('admin.dashboard') }}"
+                   class="block px-4 py-2 rounded text-gray-700 hover:text-purple-700 {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+                   대시보드
+                </a>
+            </li>
+            <li class="mb-2">
+                <a href="{{ url_for('admin.manage_models') }}"
+                   class="block px-4 py-2 rounded text-gray-700 hover:text-purple-700 {% if request.endpoint == 'admin.manage_models' %}active{% endif %}">
+                   베이스 모델 관리
+                </a>
+            </li>
+            <li class="mb-2">
+                <a href="{{ url_for('admin.manage_settings') }}"
+                   class="block px-4 py-2 rounded text-gray-700 hover:text-purple-700 {% if request.endpoint == 'admin.manage_settings' %}active{% endif %}">
+                   시스템 설정 관리
+                </a>
+            </li>
+            {# 필요시 사용자 관리 등 다른 메뉴 추가 #}
+            </ul>
+    </aside>
+
+    <main class="flex-grow bg-white p-6 rounded-lg shadow-md">
+        {% block admin_content %}
+        {% endblock %}
+    </main>
+
+</div>
+{% endblock %} {# 메인 컨텐츠 영역 끝 #}
+
+{% block scripts %}
+    {# 관리자 페이지 전용 JavaScript 추가 가능 #}
+    {{ super() }} {# base.html의 scripts 블록 내용 포함 #}
+    {% block admin_scripts %}{% endblock %}
+{% endblock %}

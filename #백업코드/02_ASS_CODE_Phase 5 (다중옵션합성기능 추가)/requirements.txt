@@ -1,0 +1,23 @@
+# Flask framework and utilities
+Flask
+python-dotenv
+
+# Google AI SDK
+google-generativeai
+
+# Image processing library
+Pillow
+
+# PostgreSQL database driver
+# Use psycopg2-binary for easier installation on some systems,
+# or psycopg2 if you have build dependencies installed.
+psycopg2-binary
+
+# Werkzeug (Password hashing, usually installed with Flask)
+# Werkzeug
+
+# Note: It's recommended to pin specific versions for production environments
+# Example: Flask==2.3.3
+
+requests # <-- 추가
+# Werkzeug (Flask 의존성)
