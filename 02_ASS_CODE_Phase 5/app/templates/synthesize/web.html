@@ -371,61 +371,69 @@
              }
          }
 
-        async function handleSynthesize() {
-             hideError();
-             const activeSlots = itemSlotsData.filter(slot => slot && slot.file && slot.type);
+         async function handleSynthesize() {
+            hideError();
+            const activeSlots = itemSlotsData.filter(slot => slot && slot.file && slot.type);
 
-             if (activeSlots.length === 0) { showError("합성할 아이템 이미지와 종류를 하나 이상 선택해주세요."); return; }
-             if (synthesizeButton?.disabled && !buttonText?.textContent.includes('처리중')) { /* ... 횟수 초과 등 ... */ return; }
+            if (activeSlots.length === 0) { showError("합성할 아이템 이미지와 종류를 하나 이상 선택해주세요."); return; }
+            if (synthesizeButton?.disabled && !buttonText?.textContent.includes('처리중')) { /* ... 횟수 초과 등 ... */ return; }
 
-            setLoadingState(true);
-            if(resultImage) resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
-            if(resultActions) resultActions.classList.add('hidden');
-            if(resultPlaceholder) { resultPlaceholder.classList.remove('hidden'); resultPlaceholder.textContent = '이미지 합성 중...'; }
+           setLoadingState(true);
+           if(resultImage) resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
+           if(resultActions) resultActions.classList.add('hidden');
+           if(resultPlaceholder) { resultPlaceholder.classList.remove('hidden'); resultPlaceholder.textContent = '이미지 합성 중...'; }
 
-            const formData = new FormData();
-            activeSlots.forEach((slot, index) => {
-                formData.append(`item_image_${index}`, slot.file);
-                formData.append(`item_type_${index}`, slot.type);
-            });
-            formData.append('item_count', activeSlots.length);
+           const formData = new FormData();
+           activeSlots.forEach((slot, index) => {
+               formData.append(`item_image_${index}`, slot.file);
+               formData.append(`item_type_${index}`, slot.type);
+           });
+           formData.append('item_count', activeSlots.length);
 
-            console.log("Synthesizing with multiple items:", activeSlots.map(s => s.type));
-            // console.log("FormData entries:", Array.from(formData.entries())); // 디버깅 필요시 주석 해제
+           console.log("Synthesizing with multiple items (single call):", activeSlots.map(s => s.type));
+           // console.log("FormData entries:", Array.from(formData.entries())); // 디버깅 필요시 주석 해제
 
-            try {
-                // --- 임시: 백엔드 미구현 알림 ---
-                showError("백엔드에서 다중 아이템 처리가 아직 구현되지 않았습니다.");
-                throw new Error("Backend multi-item support not implemented yet.");
-                // --- 임시 코드 끝 ---
+           try {
+               // --- 수정: 임시 오류 발생 코드 제거 ---
+               // showError("백엔드에서 다중 아이템 처리가 아직 구현되지 않았습니다."); // 제거
+               // throw new Error("Backend multi-item support not implemented yet."); // 제거
 
-                /* // 백엔드 구현 후 사용할 코드
-                const response = await fetch('/synthesize/web_multi', { method: 'POST', body: formData });
-                const result = await response.json();
-                if (!response.ok) { throw new Error(result.error || `HTTP error! status: ${response.status}`); }
-                console.log("API Result:", result);
-                 if (result.output_file_url && resultImage && downloadLink && resultActions && resultPlaceholder) {
-                     const finalImageUrl = result.output_file_url + '?t=' + new Date().getTime();
-                     resultImage.src = finalImageUrl;
-                     downloadLink.href = result.output_file_url;
-                     resultActions.classList.remove('hidden');
-                     resultPlaceholder.classList.add('hidden');
-                     if (result.remaining_attempts !== undefined && remainingAttemptsSpan) {
-                         remainingAttemptsSpan.textContent = result.remaining_attempts;
-                         updateSynthesizeButtonState();
-                     }
-                 } else { throw new Error("합성 결과 URL을 받지 못했습니다."); }
-                */
-            } catch (error) {
-                console.error('Synthesis Error:', error);
-                showError(`합성 중 오류 발생: ${error.message}`);
-                if(resultImage) resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
-                if(resultActions) resultActions.classList.add('hidden');
-                if(resultPlaceholder) { resultPlaceholder.classList.remove('hidden'); resultPlaceholder.textContent = '합성에 실패했습니다.'; }
-            } finally {
-                setLoadingState(false);
-            }
-        }
+               // --- 수정: 실제 백엔드 호출 실행 ---
+               // '/synthesize/web' 엔드포인트는 이미 다중 아이템 수신 로직으로 수정됨
+               const response = await fetch('/synthesize/web', {
+                   method: 'POST',
+                   body: formData, // FormData 전송
+               });
+               const result = await response.json();
+               if (!response.ok) { throw new Error(result.error || `HTTP error! status: ${response.status}`); }
+               console.log("API Result:", result);
+
+               // --- 결과 처리 (동일) ---
+                if (result.output_file_url && resultImage && downloadLink && resultActions && resultPlaceholder) {
+                    const finalImageUrl = result.output_file_url + '?t=' + new Date().getTime();
+                    resultImage.src = finalImageUrl;
+                    downloadLink.href = result.output_file_url;
+                    resultActions.classList.remove('hidden');
+                    resultPlaceholder.classList.add('hidden');
+                    if (result.remaining_attempts !== undefined && remainingAttemptsSpan) {
+                        remainingAttemptsSpan.textContent = result.remaining_attempts;
+                        updateSynthesizeButtonState();
+                    }
+                } else {
+                    // 백엔드에서 output_file_url이 안 온 경우 (합성은 성공했으나 URL 누락 등)
+                    console.error("Output file URL missing in successful response:", result)
+                    throw new Error("합성 결과 URL을 받지 못했습니다.");
+                }
+           } catch (error) {
+               console.error('Synthesis Error:', error);
+               showError(`합성 중 오류 발생: ${error.message}`);
+               if(resultImage) resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
+               if(resultActions) resultActions.classList.add('hidden');
+               if(resultPlaceholder) { resultPlaceholder.classList.remove('hidden'); resultPlaceholder.textContent = '합성에 실패했습니다.'; }
+           } finally {
+               setLoadingState(false);
+           }
+       }
 
 
         // --- 이벤트 리스너 연결 (DOMContentLoaded) ---
