@@ -18,3 +18,6 @@ psycopg2-binary
 
 # Note: It's recommended to pin specific versions for production environments
 # Example: Flask==2.3.3
+
+requests # <-- 추가
+# Werkzeug (Flask 의존성)
