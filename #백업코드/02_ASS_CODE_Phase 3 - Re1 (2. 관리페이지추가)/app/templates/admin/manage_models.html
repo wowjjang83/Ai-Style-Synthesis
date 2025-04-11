@@ -1,0 +1,393 @@
+{% extends 'admin/base_admin.html' %}
+
+{% block title %}베이스 모델 관리 - {{ super() }}{% endblock %}
+
+{% block admin_content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">베이스 모델 관리</h1>
+
+{# 메시지 표시 영역 (JavaScript로 제어) #}
+<div id="model-message-area" class="mb-4"></div>
+
+{# 새 모델 추가 버튼 #}
+<div class="mb-4 text-right">
+    <button id="add-model-button" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out">
+        + 새 모델 추가
+    </button>
+</div>
+
+{# 베이스 모델 목록 테이블 #}
+<div class="overflow-x-auto bg-white rounded-lg shadow">
+    <table class="min-w-full leading-normal">
+        <thead>
+            <tr>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">ID</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">이름</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">이미지</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">프롬프트 (일부)</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">활성 상태</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">생성일</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">관리</th>
+            </tr>
+        </thead>
+        <tbody id="model-list-body">
+            {# 백엔드에서 전달된 models 리스트를 반복하여 행 생성 #}
+            {% for model in models %}
+            <tr id="model-row-{{ model.id }}">
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">{{ model.id }}</td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm model-name">{{ model.name | default('N/A') }}</td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    <img src="{{ model.image_url }}" alt="{{ model.name }}" class="w-16 h-16 object-cover rounded model-image-url"
+                         onerror="this.onerror=null; this.src='https://placehold.co/64x64/cccccc/666666?text=Error';">
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm model-prompt">
+                    {{ (model.prompt | default(''))[:50] }}{% if (model.prompt | default(''))|length > 50 %}...{% endif %}
+                    {# 숨겨진 필드에 전체 프롬프트 저장 (수정 시 사용) #}
+                    <span class="hidden full-prompt">{{ model.prompt | default('') }}</span>
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm text-center model-is-active">
+                    {% if model.is_active %}
+                        <span class="inline-block px-3 py-1 text-xs font-semibold text-green-900 bg-green-200 rounded-full">활성</span>
+                    {% else %}
+                        <span class="inline-block px-3 py-1 text-xs font-semibold text-gray-700 bg-gray-200 rounded-full">비활성</span>
+                    {% endif %}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm">
+                    {{ model.created_at.strftime('%Y-%m-%d %H:%M') if model.created_at else 'N/A' }}
+                </td>
+                <td class="px-5 py-4 border-b border-gray-200 bg-white text-sm text-center whitespace-nowrap">
+                    {# 관리 버튼들 (data-* 속성에 ID 저장) #}
+                    <button class="edit-model-button text-indigo-600 hover:text-indigo-900 mr-2" data-model-id="{{ model.id }}" title="수정">수정</button>
+                    <button class="delete-model-button text-red-600 hover:text-red-900 mr-2" data-model-id="{{ model.id }}" title="삭제">삭제</button>
+                    {% if not model.is_active %}
+                    <button class="activate-model-button text-green-600 hover:text-green-900" data-model-id="{{ model.id }}" title="활성화">활성화</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="7" class="px-5 py-5 border-b border-gray-200 bg-white text-center text-sm text-gray-500">
+                    등록된 베이스 모델이 없습니다.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# 모델 추가/수정 모달 (초기에는 숨김) #}
+<div id="model-modal" class="fixed z-50 inset-0 overflow-y-auto hidden" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+  <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+    {# 배경 오버레이 #}
+    <div id="modal-overlay" class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+    {# 모달 컨텐츠 수직 중앙 정렬용 #}
+    <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+    {# 모달 패널 #}
+    <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+      <form id="model-form">
+        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+          <div class="sm:flex sm:items-start">
+            <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+              <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">베이스 모델 정보</h3>
+              {# 수정 시 사용될 숨겨진 ID 필드 #}
+              <input type="hidden" id="model-id" name="model_id">
+              {# 폼 입력 필드들 #}
+              <div class="space-y-4">
+                <div>
+                  <label for="model-name" class="block text-sm font-medium text-gray-700">모델 이름 <span class="text-red-500">*</span></label>
+                  <input type="text" name="name" id="model-name" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md">
+                </div>
+                <div>
+                  <label for="model-image-url" class="block text-sm font-medium text-gray-700">이미지 URL <span class="text-red-500">*</span></label>
+                  <input type="url" name="image_url" id="model-image-url" required class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md" placeholder="http://... 또는 /static/images/...">
+                   <p class="mt-1 text-xs text-gray-500">웹 URL 또는 서버 내 정적 파일 경로 (예: /static/images/model.jpg)</p>
+                </div>
+                <div>
+                  <label for="model-prompt" class="block text-sm font-medium text-gray-700">프롬프트 (선택)</label>
+                  <textarea id="model-prompt" name="prompt" rows="3" class="mt-1 focus:ring-indigo-500 focus:border-indigo-500 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"></textarea>
+                </div>
+                {# 모달 내 오류 메시지 영역 #}
+                <div id="modal-error-area" class="text-red-600 text-sm hidden"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {# 모달 버튼 영역 #}
+        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+          <button type="submit" id="save-model-button" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-wait">
+            <span class="button-text">저장</span>
+            <span class="loading-spinner hidden animate-spin rounded-full h-4 w-4 border-b-2 border-white ml-2" style="display: inline-block; vertical-align: middle;"></span>
+          </button>
+          <button type="button" id="cancel-modal-button" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+            취소
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {# admin_content 끝 #}
+
+{% block admin_scripts %}
+<script>
+    // --- DOM Elements ---
+    const addModelButton = document.getElementById('add-model-button');
+    const modelModal = document.getElementById('model-modal');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const modelForm = document.getElementById('model-form');
+    const cancelModalButton = document.getElementById('cancel-modal-button');
+    const saveModelButton = document.getElementById('save-model-button');
+    const saveButtonText = saveModelButton.querySelector('.button-text');
+    const saveButtonSpinner = saveModelButton.querySelector('.loading-spinner');
+    const modelListBody = document.getElementById('model-list-body');
+    const modelMessageArea = document.getElementById('model-message-area'); // 페이지 상단 메시지 영역
+    const modalErrorArea = document.getElementById('modal-error-area'); // 모달 내 오류 메시지 영역
+    const modalTitle = document.getElementById('modal-title');
+    const modelIdInput = document.getElementById('model-id');
+    const modelNameInput = document.getElementById('model-name');
+    const modelImageUrlInput = document.getElementById('model-image-url');
+    const modelPromptInput = document.getElementById('model-prompt');
+
+    // --- Helper Functions ---
+    function openModal(mode = 'add', modelData = null) {
+        modelForm.reset(); // 폼 초기화
+        modelIdInput.value = '';
+        hideModalError(); // 모달 내 오류 메시지 숨기기
+        hidePageMessage(); // 페이지 상단 메시지 숨기기
+
+        if (mode === 'edit' && modelData) {
+            modalTitle.textContent = '베이스 모델 수정';
+            modelIdInput.value = modelData.id; // 숨겨진 필드에 ID 설정
+            modelNameInput.value = modelData.name || '';
+            modelImageUrlInput.value = modelData.image_url || '';
+            // 수정: 숨겨진 span에서 전체 프롬프트 가져오기 또는 API 호출 결과 사용
+            modelPromptInput.value = modelData.prompt || ''; // modelData에 전체 프롬프트가 있다고 가정
+            saveButtonText.textContent = '수정';
+        } else {
+            modalTitle.textContent = '새 베이스 모델 추가';
+            saveButtonText.textContent = '저장';
+        }
+        modelModal.classList.remove('hidden'); // 모달 보이기
+    }
+
+    function closeModal() {
+        modelModal.classList.add('hidden'); // 모달 숨기기
+    }
+
+    function showPageMessage(message, type = 'error') {
+        const alertClass = type === 'success'
+            ? 'bg-green-100 border-green-400 text-green-700'
+            : 'bg-red-100 border-red-400 text-red-700';
+        modelMessageArea.innerHTML = `
+            <div class="px-4 py-3 rounded relative border ${alertClass}" role="alert">
+                <span class="block sm:inline">${message}</span>
+                <button type="button" class="absolute top-0 bottom-0 right-0 px-4 py-3" onclick="this.parentElement.remove();">&times;</button>
+            </div>`;
+    }
+
+    function hidePageMessage() {
+         modelMessageArea.innerHTML = '';
+    }
+
+     function showModalError(message) {
+         modalErrorArea.textContent = message;
+         modalErrorArea.classList.remove('hidden');
+     }
+
+     function hideModalError() {
+          modalErrorArea.textContent = '';
+          modalErrorArea.classList.add('hidden');
+     }
+
+     function setSaveButtonLoading(isLoading) {
+         if (isLoading) {
+             saveModelButton.disabled = true;
+             saveButtonText.textContent = '저장 중...';
+             saveButtonSpinner.classList.remove('hidden');
+         } else {
+             saveModelButton.disabled = false;
+             // 모드에 따라 버튼 텍스트 복원
+             saveButtonText.textContent = modelIdInput.value ? '수정' : '저장';
+             saveButtonSpinner.classList.add('hidden');
+         }
+     }
+
+
+    // --- Event Handlers ---
+
+    // 모델 추가/수정 폼 제출 처리
+    async function handleFormSubmit(event) {
+        event.preventDefault(); // 기본 제출 동작 방지
+        hideModalError(); // 이전 모달 오류 숨기기
+        hidePageMessage(); // 이전 페이지 메시지 숨기기
+
+        const modelId = modelIdInput.value;
+        const isEditMode = !!modelId; // modelId 값이 있으면 true (수정 모드)
+        const url = isEditMode ? `/admin/models/${modelId}` : '/admin/models';
+        const method = isEditMode ? 'PUT' : 'POST';
+
+        const formData = {
+            name: modelNameInput.value.trim(),
+            image_url: modelImageUrlInput.value.trim(),
+            prompt: modelPromptInput.value.trim()
+            // is_active는 별도 '활성화' 버튼으로 처리
+        };
+
+        // 간단한 클라이언트 측 유효성 검사
+        if (!formData.name || !formData.image_url) {
+             showModalError('모델 이름과 이미지 URL은 필수 항목입니다.');
+             return;
+        }
+        // URL 형식 검사 (간단하게)
+        if (!formData.image_url.startsWith('/') && !formData.image_url.startsWith('http')) {
+             showModalError('이미지 URL은 /static/... 또는 http(s)://... 형식이어야 합니다.');
+             return;
+        }
+
+        setSaveButtonLoading(true); // 로딩 상태 시작
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 'X-CSRFToken': '...' // 필요시 CSRF 토큰 추가
+                },
+                body: JSON.stringify(formData)
+            });
+
+            const result = await response.json(); // 응답 본문 읽기
+
+            if (!response.ok) {
+                // API 에러 발생 시
+                throw new Error(result.error || `서버 오류 (${response.status})`);
+            }
+
+            // 성공 시
+            showPageMessage(isEditMode ? '모델 정보가 수정되었습니다.' : '새 모델이 추가되었습니다.', 'success');
+            closeModal(); // 모달 닫기
+            // 목록 새로고침 (가장 간단한 방법)
+            // TODO: 더 나은 UX를 위해 동적으로 테이블 업데이트 고려
+            location.reload();
+
+        } catch (error) {
+            console.error('Save model error:', error);
+            showModalError(`모델 저장 실패: ${error.message}`); // 모달 내부에 오류 표시
+        } finally {
+             setSaveButtonLoading(false); // 로딩 상태 종료
+        }
+    }
+
+    // 모델 삭제 처리
+    async function handleDeleteModel(modelId) {
+        if (!confirm(`정말로 ID ${modelId} 모델을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
+            return; // 사용자가 취소
+        }
+        hidePageMessage(); // 이전 메시지 숨기기
+
+        try {
+            const response = await fetch(`/admin/models/${modelId}`, {
+                method: 'DELETE',
+                // headers: { 'X-CSRFToken': '...' }
+            });
+
+            if (response.status === 204) { // No Content 성공
+                 showPageMessage(`모델 (ID: ${modelId})이(가) 삭제되었습니다.`, 'success');
+                 // 목록에서 해당 행 제거 (동적 업데이트)
+                 const row = document.getElementById(`model-row-${modelId}`);
+                 if (row) {
+                     row.remove();
+                 } else {
+                     location.reload(); // 행 못찾으면 그냥 새로고침
+                 }
+            } else {
+                 // 삭제 실패 시 (예: 404 Not Found)
+                 const result = await response.json().catch(() => ({})); // 오류 시 빈 객체
+                 throw new Error(result.error || `삭제 실패 (${response.status})`);
+            }
+        } catch (error) {
+             console.error('Delete model error:', error);
+             showPageMessage(`모델 삭제 실패: ${error.message}`, 'error');
+        }
+    }
+
+     // 모델 활성화 처리
+     async function handleActivateModel(modelId) {
+         if (!confirm(`ID ${modelId} 모델을 활성화하시겠습니까? 다른 활성 모델은 비활성화됩니다.`)) {
+             return; // 사용자가 취소
+         }
+         hidePageMessage(); // 이전 메시지 숨기기
+
+         try {
+             const response = await fetch(`/admin/models/${modelId}/activate`, {
+                 method: 'POST', // 활성화 API는 POST로 정의했음
+                 // headers: { 'X-CSRFToken': '...' }
+             });
+
+             const result = await response.json(); // 성공 시 업데이트된 모델 정보 반환 예상
+
+             if (!response.ok) {
+                 throw new Error(result.error || `활성화 실패 (${response.status})`);
+             }
+
+             showPageMessage(`모델 (ID: ${modelId})이(가) 활성화되었습니다.`, 'success');
+             // 목록 새로고침 (활성/비활성 상태 변경 반영 위해)
+             location.reload();
+
+         } catch (error) {
+              console.error('Activate model error:', error);
+              showPageMessage(`모델 활성화 실패: ${error.message}`, 'error');
+         }
+     }
+
+    // --- Event Listener Bindings ---
+    // '새 모델 추가' 버튼 클릭 시 모달 열기
+    addModelButton.addEventListener('click', () => openModal('add'));
+
+    // 모달 '취소' 버튼 또는 배경 클릭 시 모달 닫기
+    cancelModalButton.addEventListener('click', closeModal);
+    modalOverlay.addEventListener('click', closeModal); // 배경 클릭 시 닫기
+
+    // 모달 폼 제출 이벤트 처리
+    modelForm.addEventListener('submit', handleFormSubmit);
+
+    // 테이블 내 버튼 클릭 이벤트 처리 (이벤트 위임)
+    modelListBody.addEventListener('click', (event) => {
+        const targetButton = event.target;
+        const modelId = targetButton.dataset.modelId; // data-model-id 값 가져오기
+
+        if (targetButton.classList.contains('edit-model-button')) {
+            // '수정' 버튼 클릭 시
+            console.log('Edit button clicked for ID:', modelId);
+            // 현재 행에서 데이터 가져오기 (더 정확하게 하려면 API로 모델 상세 정보 조회)
+            const row = targetButton.closest('tr');
+            const modelData = {
+                id: modelId,
+                name: row.querySelector('.model-name')?.textContent.trim() || '',
+                image_url: row.querySelector('.model-image-url')?.src || '',
+                // 수정: 숨겨진 span에서 전체 프롬프트 가져오기
+                prompt: row.querySelector('.full-prompt')?.textContent.trim() || ''
+            };
+            if (modelData.name && modelData.image_url) {
+                 openModal('edit', modelData);
+            } else {
+                 // TODO: API로 상세 정보 조회 로직 추가
+                 showPageMessage('모델 정보를 가져오는 데 실패했습니다. API 구현이 필요할 수 있습니다.', 'error');
+                 console.error('Failed to get model data from row for editing.');
+            }
+
+        } else if (targetButton.classList.contains('delete-model-button')) {
+            // '삭제' 버튼 클릭 시
+            console.log('Delete button clicked for ID:', modelId);
+            handleDeleteModel(modelId);
+
+        } else if (targetButton.classList.contains('activate-model-button')) {
+            // '활성화' 버튼 클릭 시
+            console.log('Activate button clicked for ID:', modelId);
+            handleActivateModel(modelId);
+        }
+    });
+
+</script>
+{% endblock %}

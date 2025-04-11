@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Style Synthesis - 이미지 합성</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles */
+        .upload-area {
+            border: 2px dashed #ccc;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            min-height: 150px; /* 최소 높이 지정 */
+            display: flex; /* Flexbox 사용 */
+            flex-direction: column; /* 세로 정렬 */
+            justify-content: center; /* 수직 중앙 정렬 */
+            align-items: center; /* 수평 중앙 정렬 */
+        }
+        .upload-area:hover {
+            background-color: #f9f9f9;
+        }
+        .upload-area.dragover {
+             background-color: #e0e0e0;
+             border-color: #aaa;
+        }
+        #loading-indicator {
+            display: none; /* Initially hidden */
+        }
+        /* Simple spinner */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #4f46e5; /* Indigo color */
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* Ensure result image maintains aspect ratio */
+        #result-image, #base-model-image {
+             object-fit: cover; /* 이미지 비율 유지하며 채우기 */
+             width: 100%;
+             height: 100%;
+        }
+        .aspect-w-1.aspect-h-1 { /* Tailwind aspect ratio plugin simulation */
+             position: relative;
+             padding-bottom: 100%; /* 1:1 Aspect Ratio */
+         }
+        .aspect-w-1.aspect-h-1 > img {
+             position: absolute;
+             height: 100%;
+             width: 100%;
+             top: 0;
+             right: 0;
+             bottom: 0;
+             left: 0;
+         }
+         /* Ensure error message area is visible when not hidden */
+         #upload-error-message-area:not(.hidden) {
+             display: block !important;
+         }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-6xl">
+        <header class="mb-8 flex flex-wrap justify-between items-center gap-4"> {# flex-wrap 추가 #}
+             <a href="{{ url_for('synthesize.index') }}"> {# 메인 페이지 링크 #}
+                <h1 class="text-3xl font-bold text-gray-800 hover:text-indigo-600">AI Style Synthesis</h1>
+             </a>
+            <div class="text-right">
+                {# 로그인 상태 표시 (백엔드에서 전달된 데이터 사용) #}
+                {% if session.get('user_id') %}
+                <div id="user-info" class="text-sm text-gray-600 mb-1">
+                    <span id="user-email-display">{{ user_email }}</span>
+                    (<span id="remaining-attempts-display">{{ remaining_attempts }}</span>회 남음)
+                </div>
+                 <form action="{{ url_for('auth.logout') }}" method="POST" style="display: inline;">
+                    <button type="submit" id="logout-button" class="bg-red-500 hover:bg-red-700 text-white text-sm font-bold py-1 px-3 rounded">
+                        로그아웃
+                    </button>
+                 </form>
+                    {# if session.get('role') #}
+                    <a href="/admin/dashboard" id="admin-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
+                        관리페이지
+                    </a>
+                    {# else #}
+                    {# endif #}
+                {% else %}
+                 {# 비로그인 시 로그인/회원가입 버튼 (base.html과 동일 로직) #}
+                 <a href="{{ url_for('auth.login') }}" id="login-button" class="bg-blue-500 hover:bg-blue-700 text-white text-sm font-bold py-1 px-3 rounded mr-2">
+                     로그인
+                 </a>
+                 <a href="{{ url_for('auth.register') }}" id="register-button" class="bg-green-500 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded">
+                     회원가입
+                 </a>
+                {% endif %}
+            </div>
+        </header>
+
+        {# 플래시 메시지 표시 영역 #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-6"> {# 헤더 아래, 메인 컨텐츠 위에 표시 #}
+                {% for category, message in messages %}
+                    <div class="px-4 py-3 rounded relative
+                        {% if category == 'error' %} bg-red-100 border border-red-400 text-red-700
+                        {% elif category == 'warning' %} bg-yellow-100 border border-yellow-400 text-yellow-700
+                        {% elif category == 'success' %} bg-green-100 border border-green-400 text-green-700
+                        {% else %} bg-blue-100 border border-blue-400 text-blue-700 {% endif %}"
+                         role="alert">
+                        <span class="block sm:inline">{{ message }}</span>
+                    </div>
+                {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">기본 모델</h2>
+                <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
+                     {# DB에서 전달된 base_model_image_url 변수 사용 #}
+                    <img id="base-model-image" src="{{ base_model_image_url }}" alt="기본 모델"
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/cccccc/666666?text=Base+Model+Load+Error';">
+                </div>
+                <p class="text-sm text-gray-500 mt-2 text-center">현재 적용되는 기본 모델입니다.</p>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md flex flex-col"> {# flex flex-col 추가 #}
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">아이템 선택 및 업로드</h2>
+
+                <div class="mb-4">
+                    <label for="item-type" class="block text-sm font-medium text-gray-700 mb-1">아이템 종류:</label>
+                    <select id="item-type" name="item_type" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+                        <option value="top">상의 (Top)</option>
+                        <option value="bottom">하의 (Bottom)</option>
+                        <option value="shoes">신발 (Shoes)</option>
+                        <option value="bag">가방 (Bag)</option>
+                        <option value="accessory">액세서리 (Accessory)</option>
+                        <option value="hair">헤어 (Hair)</option>
+                    </select>
+                </div>
+
+                <div class="mb-4 flex-grow"> {# flex-grow 추가 #}
+                    <label for="item-image-upload" class="block text-sm font-medium text-gray-700 mb-1">아이템 이미지:</label>
+                    <div id="upload-area" class="upload-area rounded-md">
+                        <input type="file" id="item-image-upload" accept="image/png, image/jpeg, image/jpg" class="hidden">
+                        <div id="upload-content"> {# 내용을 감싸는 div 추가 #}
+                            <p id="upload-prompt" class="text-gray-500">여기에 이미지를 드래그하거나<br>클릭하여 업로드하세요.<br>(PNG, JPG, JPEG, 최대 5MB)</p>
+                            <div id="image-preview-container" class="mt-4 hidden">
+                                <img id="image-preview" src="#" alt="업로드 미리보기" class="max-h-40 mx-auto rounded">
+                                <button id="remove-image-button" class="mt-2 text-xs text-red-600 hover:text-red-800">이미지 제거</button>
+                            </div>
+                        </div>
+                    </div>
+                     <p class="text-xs text-gray-500 mt-1">팁: 배경이 없거나 단색인 이미지가 더 좋은 결과를 얻을 수 있습니다.</p>
+                </div>
+
+                 {# 오류 메시지 표시 영역 #}
+                 <div id="upload-error-message-area" class="mb-4 px-4 py-3 rounded relative bg-red-100 border border-red-400 text-red-700 hidden" role="alert">
+                     <strong class="font-bold">오류:</strong>
+                     <span id="upload-error-message-content" class="block sm:inline"></span>
+                 </div>
+
+                <div class="mt-auto"> {# 버튼을 하단에 위치시키기 위해 mt-auto 추가 #}
+                    <button id="synthesize-button" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-md focus:outline-none focus:shadow-outline transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center" disabled>
+                         <span class="button-text">합성하기</span>
+                         <span class="loading-spinner hidden animate-spin rounded-full h-5 w-5 border-b-2 border-white ml-2"></span>
+                    </button>
+                     <div id="loading-indicator" class="mt-2 text-center text-gray-600 hidden">
+                        <p>이미지 합성 중... (최대 1분 정도 소요될 수 있습니다)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-700">합성 결과</h2>
+                <div class="aspect-w-1 aspect-h-1 bg-gray-200 rounded-md overflow-hidden">
+                    <img id="result-image" src="https://placehold.co/512x512/e0e0e0/999999?text=Result" alt="합성 결과"
+                         onerror="this.onerror=null; this.src='https://placehold.co/512x512/ffdddd/cc0000?text=Result+Load+Error';"> {# 결과 로드 실패 시 #}
+                </div>
+                 <div id="result-actions" class="mt-4 text-center hidden">
+                    <a id="download-link" href="#" download="synthesized_image.png"> {# 다운로드 링크 #}
+                        <button id="download-button" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                            결과 다운로드
+                        </button>
+                    </a>
+                 </div>
+                 <p id="result-placeholder" class="text-sm text-gray-500 mt-2 text-center">합성 결과가 여기에 표시됩니다.</p>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('item-image-upload');
+        const uploadPrompt = document.getElementById('upload-prompt');
+        const previewContainer = document.getElementById('image-preview-container');
+        const previewImage = document.getElementById('image-preview');
+        const removeButton = document.getElementById('remove-image-button');
+        const synthesizeButton = document.getElementById('synthesize-button');
+        const buttonText = synthesizeButton.querySelector('.button-text');
+        const buttonSpinner = synthesizeButton.querySelector('.loading-spinner');
+        const resultImage = document.getElementById('result-image');
+        const resultActions = document.getElementById('result-actions');
+        const downloadLink = document.getElementById('download-link');
+        const resultPlaceholder = document.getElementById('result-placeholder');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const errorMessageArea = document.getElementById('upload-error-message-area');
+        const errorMessageContent = document.getElementById('upload-error-message-content');
+        const remainingAttemptsSpan = document.getElementById('remaining-attempts-display');
+        const itemTypeSelect = document.getElementById('item-type');
+
+        let uploadedFile = null;
+
+        // --- Constants ---
+        const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+        const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg'];
+
+        // --- Event Listeners ---
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
+        uploadArea.addEventListener('drop', handleDrop);
+        removeButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            removeImage();
+        });
+        synthesizeButton.addEventListener('click', handleSynthesize);
+
+        // --- Functions ---
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            processSelectedFile(file);
+        }
+
+        function handleDragOver(event) {
+            event.preventDefault();
+            uploadArea.classList.add('dragover');
+        }
+
+        function handleDragLeave(event) {
+            event.preventDefault();
+            uploadArea.classList.remove('dragover');
+        }
+
+        function handleDrop(event) {
+            event.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = event.dataTransfer.files[0];
+            processSelectedFile(file);
+        }
+
+        // 파일 선택 또는 드롭 시 처리 함수
+        function processSelectedFile(file) {
+             hideError(); // Start by hiding previous errors
+             if (file) {
+                 console.log("[File Processing] File selected:", file.name, file.type, file.size);
+                 // Check 1: File Type
+                 if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+                     console.log("[File Validation] Fail: Invalid file type -", file.type);
+                     showError(`허용되지 않는 파일 형식입니다. (PNG, JPG, JPEG)`);
+                     removeImage(true); // 수정: 오류 발생 시에는 오류 메시지 숨기지 않도록 인자 전달 (선택적)
+                     return; // Stop processing
+                 }
+                 // Check 2: File Size
+                 if (file.size > MAX_FILE_SIZE) {
+                     console.log("[File Validation] Fail: File size exceeded -", file.size);
+                     showError(`파일 크기가 너무 큽니다. ${MAX_FILE_SIZE / 1024 / 1024}MB 이하의 이미지를 업로드해주세요.`);
+                     removeImage(true); // 수정: 오류 발생 시에는 오류 메시지 숨기지 않도록 인자 전달 (선택적)
+                     return; // Stop processing
+                 }
+                 // Validation passed
+                 console.log("[File Validation] Success");
+                 displayPreview(file); // Show preview
+                 uploadedFile = file; // Store file object
+                 updateSynthesizeButtonState(); // Update button state
+             } else {
+                 removeImage(); // Handle case where no file is selected
+             }
+         }
+
+        // 이미지 미리보기 표시 함수
+        function displayPreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                previewImage.src = e.target.result;
+                previewContainer.classList.remove('hidden'); // Show preview area
+                uploadPrompt.classList.add('hidden'); // Hide prompt text
+            }
+            reader.readAsDataURL(file); // Read file as Data URL
+        }
+
+        // 이미지 제거 함수
+        // 수정: keepError 인자 추가 (기본값 false)
+        function removeImage(keepError = false) {
+            fileInput.value = ''; // Clear file input value (important!)
+            previewImage.src = '#'; // Reset preview image src
+            previewContainer.classList.add('hidden'); // Hide preview area
+            uploadPrompt.classList.remove('hidden'); // Show prompt text
+            uploadedFile = null; // Clear stored file object
+            updateSynthesizeButtonState(); // Update button state
+            // 수정: keepError가 true가 아닐 때만 오류 메시지 숨김
+            if (!keepError) {
+                hideError();
+            }
+            console.log("[Image Removed]");
+        }
+
+        // '합성하기' 버튼 클릭 시 실행될 함수
+        async function handleSynthesize() {
+             hideError(); // Hide previous errors
+
+            // Check if file is uploaded
+            if (!uploadedFile) {
+                showError("합성할 아이템 이미지를 먼저 업로드해주세요.");
+                return;
+            }
+            // Check if button is disabled (e.g., no attempts left)
+            if (synthesizeButton.disabled) {
+                 let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
+                 if (isNaN(currentAttempts) || currentAttempts <= 0) {
+                     showError("합성 횟수를 모두 사용했습니다.");
+                 } else {
+                     showError("합성을 진행할 수 없습니다."); // Generic message if disabled for other reasons
+                 }
+                 return;
+             }
+
+            const itemType = itemTypeSelect.value; // Get selected item type
+
+            // --- Start Loading State ---
+            setLoadingState(true);
+            // Reset result area
+            resultImage.src = 'https://placehold.co/512x512/e0e0e0/999999?text=Processing...';
+            resultActions.classList.add('hidden'); // Hide download button
+            resultPlaceholder.classList.remove('hidden'); // Show placeholder
+            resultPlaceholder.textContent = '이미지 합성 중...'; // Update placeholder text
+
+            // --- Prepare FormData ---
+            const formData = new FormData();
+            formData.append('item_image', uploadedFile);
+            formData.append('item_type', itemType);
+
+            console.log("Synthesizing...", { itemType, fileName: uploadedFile.name });
+
+            // --- API Call ---
+            try {
+                const response = await fetch('/synthesize/web', {
+                    method: 'POST',
+                    body: formData,
+                });
+
+                const result = await response.json(); // Parse JSON response
+
+                // Check response status
+                if (!response.ok) {
+                    // Use error message from backend response if available
+                    throw new Error(result.error || `HTTP error! status: ${response.status}`);
+                }
+
+                // --- Process Success ---
+                console.log("API Result:", result);
+                 if (result.output_file_url) {
+                     // Display result image (add timestamp to prevent caching if needed)
+                     resultImage.src = result.output_file_url + '?t=' + new Date().getTime();
+                     downloadLink.href = result.output_file_url; // Set download link URL
+                     resultActions.classList.remove('hidden'); // Show download button
+                     resultPlaceholder.classList.add('hidden'); // Hide placeholder text
+
+                     // Update remaining attempts display if provided in response
+                     if (result.remaining_attempts !== undefined) {
+                         remainingAttemptsSpan.textContent = result.remaining_attempts;
+                         updateSynthesizeButtonState(); // Update button state based on new count
+                     }
+                 } else {
+                     // This case should ideally not happen if response.ok is true
+                     throw new Error("합성 결과 URL을 받지 못했습니다.");
+                 }
+
+            } catch (error) {
+                // --- Process Error ---
+                console.error('Synthesis Error:', error);
+                // 수정: 합성 오류는 다른 영역에 표시하거나, 여기서도 표시 가능
+                showError(`합성 중 오류 발생: ${error.message}`); // Show error message to user
+                // Update result area to show failure state
+                resultImage.src = 'https://placehold.co/512x512/ffdddd/cc0000?text=Failed';
+                resultActions.classList.add('hidden');
+                resultPlaceholder.classList.remove('hidden');
+                resultPlaceholder.textContent = '합성에 실패했습니다.';
+            } finally {
+                // --- End Loading State ---
+                setLoadingState(false);
+            }
+        }
+
+        // --- UI Helper Functions ---
+        // Set loading state for the synthesize button and indicator
+        function setLoadingState(isLoading) {
+             if (isLoading) {
+                 synthesizeButton.disabled = true; // Disable button
+                 buttonText.textContent = '처리중'; // Change button text
+                 buttonSpinner.classList.remove('hidden'); // Show spinner
+                 loadingIndicator.classList.remove('hidden'); // Show loading text
+             } else {
+                 buttonText.textContent = '합성하기'; // Restore button text
+                 buttonSpinner.classList.add('hidden'); // Hide spinner
+                 loadingIndicator.classList.add('hidden'); // Hide loading text
+                 // Re-evaluate and set button disabled state after loading
+                 updateSynthesizeButtonState();
+             }
+         }
+
+        // Update the 'Synthesize' button's disabled state and text based on file upload and remaining attempts
+        function updateSynthesizeButtonState() {
+            let currentAttempts = parseInt(remainingAttemptsSpan.textContent);
+            // Consider attempts available if not a number (e.g., 'N/A') or greater than 0
+            const hasAttempts = isNaN(currentAttempts) || currentAttempts > 0;
+            // Button enabled only if a file is uploaded AND attempts are available
+            const canSynthesize = uploadedFile && hasAttempts;
+
+            synthesizeButton.disabled = !canSynthesize;
+
+            // Update button text if attempts are used up
+            if (!hasAttempts && remainingAttemptsSpan.textContent !== 'N/A') { // Check for N/A to avoid showing '횟수 초과' initially
+                 buttonText.textContent = '횟수 초과';
+            } else {
+                 buttonText.textContent = '합성하기';
+            }
+        }
+
+        // Display error messages in the designated area
+        function showError(message) {
+            if (errorMessageArea && errorMessageContent) {
+                 errorMessageContent.textContent = message;
+                 errorMessageArea.classList.remove('hidden'); // hidden 클래스 제거
+                 console.log("Error 123 displayed:", message, "Classes:", errorMessageArea.className);
+            } else {
+                 console.error("Error message area not found in DOM!");
+                 alert(`오류: ${message}`); // Fallback to alert
+            }
+        }
+
+        // Hide the error message area
+        function hideError() {
+            if (errorMessageArea) {
+                 errorMessageArea.classList.add('hidden'); // hidden 클래스 추가
+                 errorMessageContent.textContent = '';
+                 console.log("Error hidden. Classes:", errorMessageArea.className);
+            }
+        }
+
+        // --- Initial Page Load ---
+        // Set initial button state and hide error area when DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+             updateSynthesizeButtonState();
+             hideError(); // 페이지 로드 시에는 항상 숨김
+        });
+
+    </script>
+
+</body>
+</html>
