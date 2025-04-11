@@ -1,13 +1,17 @@
 # app/routes/auth.py
 # 사용자 인증 관련 라우트 (회원가입, 로그인, 로그아웃 등)
 
-from flask import Blueprint, request, jsonify, session, current_app, g, abort, render_template, redirect, url_for, flash # render_template, redirect, url_for, flash 추가
+# 수정: werkzeug 대신 urllib.parse 사용
+from flask import (
+    Blueprint, request, jsonify, session, current_app, g, abort,
+    render_template, redirect, url_for, flash
+)
+from urllib.parse import urlparse # Python 내장 URL 파싱 라이브러리 사용
 from functools import wraps
 # db_utils에서 필요한 함수들을 import
 from app.utils.db_utils import find_user_by_email, add_user, check_user_password
 
 # 'auth' 이름으로 Blueprint 객체 생성
-# url_prefix='/auth'는 app/__init__.py에서 블루프린트 등록 시 설정
 bp = Blueprint('auth', __name__)
 
 # --- 로그인 확인 데코레이터 ---
@@ -20,13 +24,13 @@ def login_required(f):
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             print("[Auth Decorator] 로그인 필요 - 접근 거부됨")
-            # API 요청(JSON 선호)일 경우 401 JSON 응답
             if request.accept_mimetypes.accept_json and not request.accept_mimetypes.accept_html:
                  return jsonify({"error": "로그인이 필요합니다."}), 401
             else:
-                 # 일반 페이지 요청일 경우 로그인 페이지로 리디렉션
                  flash("로그인이 필요한 서비스입니다.", "warning")
-                 return redirect(url_for('auth.login', next=request.url)) # 로그인 후 원래 가려던 페이지로 이동
+                 login_url = url_for('auth.login', next=request.url)
+                 print(f"[Auth Decorator] 로그인 페이지로 리디렉션: {login_url}")
+                 return redirect(login_url)
         return f(*args, **kwargs)
     return decorated_function
 
@@ -42,8 +46,6 @@ def admin_required(f):
         if user_role != 'ADMIN':
             print(f"[Auth Decorator] 관리자 권한 필요 - 접근 거부됨 (User Role: {user_role})")
             flash("관리자 권한이 필요합니다.", "error")
-            # 접근 권한 없을 시 이전 페이지 또는 메인 페이지로 리디렉션 고려
-            # return redirect(request.referrer or url_for('synthesize.index'))
             abort(403) # 403 Forbidden 에러 발생
         return f(*args, **kwargs)
     return decorated_function
@@ -51,7 +53,6 @@ def admin_required(f):
 
 # --- Routes ---
 
-# 수정: methods에 'GET' 추가
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
     """
@@ -69,7 +70,6 @@ def register():
 
         if len(password) < 8:
             return jsonify({"error": "비밀번호는 최소 8자 이상이어야 합니다."}), 400
-        # TODO: 이메일 형식 서버측 검증 추가
 
         print(f"[Auth Route - Register POST] 회원가입 시도: {email}")
         existing_user = find_user_by_email(email)
@@ -81,11 +81,9 @@ def register():
 
         if new_user_info and "error" not in new_user_info:
             print(f"[Auth Route - Register POST] 회원가입 성공: {email} (ID: {new_user_info.get('id')})")
-            # 회원가입 성공 시 바로 로그인 처리 또는 로그인 페이지로 안내
-            # 여기서는 성공 메시지와 함께 201 반환 (JS에서 리디렉션)
             return jsonify({
                 "message": "회원가입 성공! 로그인 페이지로 이동합니다.",
-                "user": { # 민감 정보 제외
+                "user": {
                     "id": new_user_info.get("id"),
                     "email": new_user_info.get("email"),
                     "role": new_user_info.get("role")
@@ -98,19 +96,17 @@ def register():
             return jsonify({"error": "회원가입 처리 중 오류가 발생했습니다."}), 500
     else:
         # --- GET 요청 처리 ---
-        # 회원가입 페이지 템플릿 렌더링
         return render_template('auth/register.html')
 
 
-# 수정: methods에 'GET' 추가
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
     """
     GET 요청 시 로그인 페이지를 보여주고,
-    POST 요청 시 로그인을 처리합니다.
+    POST 요청 시 로그인을 처리하고 적절한 페이지로 리디렉션합니다.
     """
     if request.method == 'POST':
-        # --- POST 요청 처리 (기존 로직) ---
+        # --- POST 요청 처리 ---
         data = request.get_json()
         if not data or not data.get('email') or not data.get('password'):
             return jsonify({"error": "Email과 password를 JSON 형식으로 제공해야 합니다."}), 400
@@ -127,11 +123,36 @@ def login():
             session['user_email'] = user_data['email']
             session['user_role'] = user_data['role']
             print(f"[Auth Route - Login POST] 로그인 성공: {email} (User ID: {user_data['id']}, Role: {user_data['role']})")
-            # 로그인 성공 시 메인 페이지 URL 반환 (JS에서 리디렉션)
-            # 또는 여기서 바로 redirect 할 수도 있음
+
+            # --- 리디렉션 로직 (urllib.parse 사용) ---
+            next_page = request.args.get('next')
+            print(f"[Auth Route - Login POST] 'next' 파라미터 확인: {next_page}")
+
+            is_safe = False
+            if next_page:
+                # 수정: urlparse 사용
+                parsed_next = urlparse(next_page)
+                # netloc이 없거나(상대경로) netloc이 현재 호스트와 같으면 안전
+                if not parsed_next.netloc or parsed_next.netloc == request.host:
+                    is_safe = True
+                    print(f"[Auth Route - Login POST] 'next' URL 안전함: {next_page}")
+                else:
+                    print(f"[Auth Route - Login POST] 경고: 'next' URL이 안전하지 않음 (외부 URL 또는 다른 호스트): {next_page}")
+
+            if is_safe:
+                redirect_url = next_page
+            else:
+                if user_data['role'] == 'ADMIN':
+                    redirect_url = url_for('admin.dashboard')
+                    print(f"[Auth Route - Login POST] 기본 리디렉션 (관리자): {redirect_url}")
+                else:
+                    redirect_url = url_for('synthesize.index')
+                    print(f"[Auth Route - Login POST] 기본 리디렉션 (일반 사용자): {redirect_url}")
+
+            # --- 응답 반환 ---
             return jsonify({
                 "message": "로그인 성공!",
-                "redirect_url": url_for('synthesize.index'), # 메인 페이지 URL 전달
+                "redirect_url": redirect_url, # 계산된 리디렉션 URL 전달
                 "user": {
                     "id": user_data['id'],
                     "email": user_data['email'],
@@ -143,7 +164,6 @@ def login():
             return jsonify({"error": "이메일 또는 비밀번호가 잘못되었습니다."}), 401
     else:
         # --- GET 요청 처리 ---
-        # 로그인 페이지 템플릿 렌더링
         return render_template('auth/login.html')
 
 
@@ -163,7 +183,6 @@ def logout():
 
     print(f"[Auth Route - Logout] 로그아웃 성공: {user_email} (User ID: {user_id})")
     flash("로그아웃 되었습니다.", "success")
-    # 로그아웃 후 로그인 페이지로 리디렉션
     return redirect(url_for('auth.login'))
 
 
@@ -186,4 +205,3 @@ def get_current_user_info():
             "role": user_role
         }
     })
-
